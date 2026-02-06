@@ -1,5 +1,5 @@
 """
-Advanced Data Mapping Inference Engine for SDMX.jl
+Advanced Data Mapping Inference Engine for SDMXer.jl
 
 This module provides intelligent mapping between source data and SDMX schemas using:
 - Advanced value matching against SDMX codelists

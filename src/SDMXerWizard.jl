@@ -1,7 +1,7 @@
-module SDMXLLM
+module SDMXerWizard
 
 # Load all dependencies at package level
-using SDMX
+using SDMXer
 using PromptingTools
 using HTTP, JSON3, DataFrames, CSV, Statistics, StatsBase, Dates, EzXML, YAML, XLSX
 
@@ -89,4 +89,4 @@ export build_sdmx_context_section, build_source_analysis_section, build_code_map
 # High-level workflow management for end-to-end SDMX data transformation pipelines
 export create_workflow, execute_workflow, generate_workflow_report, ai_sdmx_workflow
 
-end # module SDMXLLM
+end # module SDMXerWizard

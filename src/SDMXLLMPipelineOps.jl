@@ -1,5 +1,5 @@
 """
-LLM-specific Pipeline Operators for SDMXLLM.jl
+LLM-specific Pipeline Operators for SDMXerWizard.jl
 """
 
 # Dependencies loaded at package level

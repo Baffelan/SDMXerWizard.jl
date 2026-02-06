@@ -1,5 +1,5 @@
 """
-Data profiling functionality for SDMXLLM.jl
+Data profiling functionality for SDMXerWizard.jl
 
 This module provides comprehensive data profiling capabilities including:
 - Column type and pattern detection

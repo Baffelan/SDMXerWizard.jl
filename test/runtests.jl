@@ -1,12 +1,12 @@
 using Test
-using SDMX
-using SDMXLLM
+using SDMXer
+using SDMXerWizard
 using DataFrames
 using HTTP
 using PromptingTools
 using Dates
 
-@testset "SDMXLLM.jl Tests" begin
+@testset "SDMXerWizard.jl Tests" begin
     
     # Run Aqua quality checks first
     @testset "Code Quality (Aqua.jl)" begin
@@ -16,17 +16,17 @@ using Dates
     @testset "LLM Integration" begin
         # Test LLM configuration setup
         ollama_config = setup_sdmx_llm(:ollama; model="llama2")
-        @test ollama_config isa SDMXLLM.LLMProvider
+        @test ollama_config isa SDMXerWizard.LLMProvider
         
         # Test that LLM provider enums are exported
-        @test SDMXLLM.OLLAMA isa SDMXLLM.LLMProvider
-        @test SDMXLLM.OPENAI isa SDMXLLM.LLMProvider
-        @test SDMXLLM.ANTHROPIC isa SDMXLLM.LLMProvider
-        @test SDMXLLM.GOOGLE isa SDMXLLM.LLMProvider
+        @test SDMXerWizard.OLLAMA isa SDMXerWizard.LLMProvider
+        @test SDMXerWizard.OPENAI isa SDMXerWizard.LLMProvider
+        @test SDMXerWizard.ANTHROPIC isa SDMXerWizard.LLMProvider
+        @test SDMXerWizard.GOOGLE isa SDMXerWizard.LLMProvider
         
         # Test enum string conversion
-        @test length(string(SDMXLLM.OLLAMA)) > 0
-        @test length(string(SDMXLLM.OPENAI)) > 0
+        @test length(string(SDMXerWizard.OLLAMA)) > 0
+        @test length(string(SDMXerWizard.OPENAI)) > 0
     end
     
     @testset "Excel Structure Analysis" begin
@@ -43,19 +43,19 @@ using Dates
     
     @testset "Advanced Mapping Inference" begin
         # Test inference engine creation
-        inference_engine = SDMXLLM.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
+        inference_engine = SDMXerWizard.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
         @test inference_engine.fuzzy_threshold == 0.6
         @test inference_engine.min_confidence == 0.2
         
         # Test fuzzy matching
-        fuzzy_score = SDMXLLM.fuzzy_match_score("country", "GEO_PICT")
+        fuzzy_score = SDMXerWizard.fuzzy_match_score("country", "GEO_PICT")
         @test fuzzy_score > 0.3  # Should find semantic similarity with improved algorithm
         @test fuzzy_score <= 1.0
         
         # Test value pattern analysis
         mock_codelist = DataFrame(code_id=["FJ", "VU", "TV"], name=["Fiji", "Vanuatu", "Tuvalu"])
         test_values = ["FJ", "VU", "TV"]
-        pattern_analysis = SDMXLLM.analyze_value_patterns(test_values, mock_codelist)
+        pattern_analysis = SDMXerWizard.analyze_value_patterns(test_values, mock_codelist)
         @test haskey(pattern_analysis, "exact_matches")
         @test pattern_analysis["exact_matches"] == 3
         @test pattern_analysis["confidence_score"] == 1.0
@@ -68,7 +68,7 @@ using Dates
         ), "test")
         
         schema_for_test = extract_dataflow_schema("https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/1.1?references=all")
-        hierarchy_analysis = SDMXLLM.detect_hierarchical_relationships(hierarchical_profile, schema_for_test)
+        hierarchy_analysis = SDMXerWizard.detect_hierarchical_relationships(hierarchical_profile, schema_for_test)
         @test haskey(hierarchy_analysis, "potential_hierarchies")
         @test haskey(hierarchy_analysis, "parent_child_relationships")
     end
@@ -88,7 +88,7 @@ using Dates
         @test haskey(script_generator.templates, "simple_csv")
         
         # Test template creation
-        standard_template = SDMXLLM.create_standard_template()
+        standard_template = SDMXerWizard.create_standard_template()
         @test standard_template.template_name == "standard_transformation"
         @test haskey(standard_template.template_sections, "header")
         @test haskey(standard_template.template_sections, "data_loading")
@@ -116,7 +116,7 @@ using Dates
         schema_for_test = extract_dataflow_schema("https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/1.1?references=all")
         
         # Create inference engine and run mapping
-        inference_engine = SDMXLLM.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
+        inference_engine = SDMXerWizard.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
         advanced_mapping = infer_advanced_mappings(inference_engine, profile, schema_for_test, test_data)
         
         transformation_steps = build_transformation_steps(advanced_mapping, profile, schema_for_test)
@@ -135,7 +135,7 @@ using Dates
         
         # Test CSV loading code
         profile = profile_source_data(test_data, "test.csv")
-        csv_loading_code = SDMXLLM.get_loading_code(profile)
+        csv_loading_code = SDMXerWizard.get_loading_code(profile)
         @test occursin("CSV.read", csv_loading_code)
         @test occursin(profile.file_path, csv_loading_code)
         
@@ -144,17 +144,17 @@ using Dates
             "test.xlsx", "xlsx", 4, 4, profile.columns, 1.0,
             String[], String[], String[]
         )
-        excel_loading_code = SDMXLLM.get_loading_code(excel_profile)
+        excel_loading_code = SDMXerWizard.get_loading_code(excel_profile)
         @test occursin("XLSX.readtable", excel_loading_code)
     end
     
     @testset "Transformation Logic" begin
         # Test transformation logic generation
-        test_mapping = SDMXLLM.MappingCandidate(
-            "country", "GEO_PICT", 1.0, SDMXLLM.HIGH, "exact",
+        test_mapping = SDMXerWizard.MappingCandidate(
+            "country", "GEO_PICT", 1.0, SDMXerWizard.HIGH, "exact",
             Dict{String, Any}(), nothing, String[]
         )
-        basic_logic = SDMXLLM.generate_transformation_logic(test_mapping)
+        basic_logic = SDMXerWizard.generate_transformation_logic(test_mapping)
         @test occursin("GEO_PICT = country", basic_logic)
     end
     
@@ -167,11 +167,11 @@ using Dates
         )
         profile = profile_source_data(test_data, "test.csv")
         schema_for_test = extract_dataflow_schema("https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/1.1?references=all")
-        inference_engine = SDMXLLM.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
+        inference_engine = SDMXerWizard.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
         advanced_mapping = infer_advanced_mappings(inference_engine, profile, schema_for_test, test_data)
         
         # Test validation logic creation
-        validation_logic = SDMXLLM.create_validation_logic(advanced_mapping, schema_for_test)
+        validation_logic = SDMXerWizard.create_validation_logic(advanced_mapping, schema_for_test)
         @test occursin("required_cols", validation_logic)
         @test occursin("missing_cols", validation_logic)
         @test occursin("missing_count", validation_logic)
@@ -186,12 +186,12 @@ using Dates
         )
         profile = profile_source_data(test_data, "test.csv")
         schema_for_test = extract_dataflow_schema("https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/1.1?references=all")
-        inference_engine = SDMXLLM.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
+        inference_engine = SDMXerWizard.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
         advanced_mapping = infer_advanced_mappings(inference_engine, profile, schema_for_test, test_data)
         transformation_steps = build_transformation_steps(advanced_mapping, profile, schema_for_test)
         
         # Test script complexity calculation
-        complexity = SDMXLLM.calculate_script_complexity(transformation_steps, advanced_mapping)
+        complexity = SDMXerWizard.calculate_script_complexity(transformation_steps, advanced_mapping)
         @test complexity >= 0.0
         @test complexity <= 1.0
     end
@@ -207,7 +207,7 @@ using Dates
         profile = profile_source_data(test_data, "test.csv")
         
         # Test template selection
-        selected_template = SDMXLLM.select_template(script_generator, profile, nothing, "")
+        selected_template = SDMXerWizard.select_template(script_generator, profile, nothing, "")
         @test selected_template.template_name in ["standard_transformation", "simple_csv"]
         
         # CSV template should be selected for simple CSV files
@@ -215,7 +215,7 @@ using Dates
             "simple.csv", "csv", 4, 3, profile.columns[1:3], 1.0,
             String[], String[], String[]
         )
-        csv_template = SDMXLLM.select_template(script_generator, simple_csv_profile, nothing, "")
+        csv_template = SDMXerWizard.select_template(script_generator, simple_csv_profile, nothing, "")
         @test csv_template.template_name == "simple_csv"
     end
     
@@ -228,26 +228,26 @@ using Dates
         )
         profile = profile_source_data(test_data, "test.csv")
         schema_for_test = extract_dataflow_schema("https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/1.1?references=all")
-        inference_engine = SDMXLLM.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
+        inference_engine = SDMXerWizard.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
         advanced_mapping = infer_advanced_mappings(inference_engine, profile, schema_for_test, test_data)
         transformation_steps = build_transformation_steps(advanced_mapping, profile, schema_for_test)
         
         # Create mock script
-        mock_script = SDMXLLM.GeneratedScript(
+        mock_script = SDMXerWizard.GeneratedScript(
             "test_script", "test.csv", "SPC:DF_BP50",
             "using DataFrames, Tidier\nsource_data = CSV.read(\"test.csv\", DataFrame)\ntransformed_data = source_data |> @mutate(GEO_PICT = country)\nCSV.write(\"output.csv\", transformed_data)",
             transformation_steps, 0.3, String[], String[], "standard_transformation", string(now())
         )
         
         # Test script validation
-        script_validation = SDMXLLM.validate_generated_script(mock_script)
+        script_validation = SDMXerWizard.validate_generated_script(mock_script)
         @test haskey(script_validation, "syntax_issues")
         @test haskey(script_validation, "missing_elements")
         @test haskey(script_validation, "recommendations")
         @test haskey(script_validation, "overall_quality")
         
         # Test script preview
-        preview_text = SDMXLLM.preview_script_output(mock_script; max_lines=20)
+        preview_text = SDMXerWizard.preview_script_output(mock_script; max_lines=20)
         @test length(preview_text) > 0
         @test occursin("PREVIEW", uppercase(preview_text))
     end
@@ -261,12 +261,12 @@ using Dates
         )
         profile = profile_source_data(test_data, "test.csv")
         schema_for_test = extract_dataflow_schema("https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/1.1?references=all")
-        inference_engine = SDMXLLM.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
+        inference_engine = SDMXerWizard.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
         advanced_mapping = infer_advanced_mappings(inference_engine, profile, schema_for_test, test_data)
         transformation_steps = build_transformation_steps(advanced_mapping, profile, schema_for_test)
         
         # Test guidance creation
-        validation_notes, user_guidance = SDMXLLM.create_script_guidance(advanced_mapping, transformation_steps, profile, schema_for_test)
+        validation_notes, user_guidance = SDMXerWizard.create_script_guidance(advanced_mapping, transformation_steps, profile, schema_for_test)
         @test length(validation_notes) > 0
         @test length(user_guidance) > 0
         @test any(note -> occursin("required", lowercase(note)), validation_notes)

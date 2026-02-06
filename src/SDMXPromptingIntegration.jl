@@ -1,5 +1,5 @@
 """
-PromptingTools.jl Integration for SDMX.jl
+PromptingTools.jl Integration for SDMXer.jl
 
 This module provides streamlined AI-powered analysis using PromptingTools.jl:
 - Multi-provider LLM support (OpenAI, Anthropic, Ollama, etc.)
@@ -176,13 +176,13 @@ Optionally loads API keys from a YAML .env file.
 
 # Important Note for Google AI
 ⚠️ **Google AI Requirement**: The `GOOGLE_API_KEY` environment variable must be set 
-BEFORE importing SDMXLLM. The `.env` file loading will set the variable for future 
+BEFORE importing SDMXerWizard. The `.env` file loading will set the variable for future 
 imports but cannot affect already-loaded GoogleGenAI.jl.
 
 ```julia
 # Correct usage for Google:
 ENV["GOOGLE_API_KEY"] = "your-api-key"
-using SDMXLLM
+using SDMXerWizard
 setup_sdmx_llm(:google)
 ```
 
@@ -196,7 +196,7 @@ setup_sdmx_llm(:openai, env_file=".env")
 
 # Google Gemini (requires ENV var before import)
 ENV["GOOGLE_API_KEY"] = "your-key"
-using SDMXLLM
+using SDMXerWizard
 setup_sdmx_llm(:google, model="gemini-1.5-flash")
 
 # Anthropic
@@ -226,7 +226,7 @@ function setup_sdmx_llm(provider::Union{Symbol, LLMProvider}=:openai; model::Str
     # Special warning for Google provider
     if provider_enum === GOOGLE && !haskey(ENV, "GOOGLE_API_KEY")
         @warn "GOOGLE_API_KEY not found in environment!" * 
-              "\n  Google AI requires the API key to be set BEFORE importing SDMXLLM." *
+              "\n  Google AI requires the API key to be set BEFORE importing SDMXerWizard." *
               "\n  Please use the init_sdmx_google.jl helper script or set ENV[\"GOOGLE_API_KEY\"] before import." *
               "\n  See the README for detailed instructions."
     end

@@ -2,7 +2,7 @@
 Comprehensive SDMX Metadata Context Builder
 
 This module extracts rich structural information from SDMX schemas and data sources
-without sending actual data to LLMs. It leverages all available SDMX.jl functions
+without sending actual data to LLMs. It leverages all available SDMXer.jl functions
 to build comprehensive context for intelligent transformation script generation.
 """
 
@@ -88,7 +88,7 @@ function extract_structural_context(dataflow_url::String)
     @assert !isempty(dataflow_url) "Dataflow URL cannot be empty"
     @assert is_url(dataflow_url) "Input must be a valid URL"
     
-    # Extract basic schema using SDMX.jl functions
+    # Extract basic schema using SDMXer.jl functions
     schema = extract_dataflow_schema(dataflow_url)
     @assert schema !== nothing "Failed to extract dataflow schema from $dataflow_url"
     @assert !isempty(schema.dataflow_info.id) "Dataflow must have a valid ID"
@@ -171,7 +171,7 @@ function extract_data_source_context(file_path::String)
     @assert file_size > 0 "File cannot be empty: $file_path"
     @assert file_size < 1_000_000_000 "File too large (>1GB): $file_path"  # Safety check
     
-    # Read and profile the source data using SDMX.jl functions
+    # Read and profile the source data using SDMXer.jl functions
     source_data = read_source_data(file_path)
     @assert nrow(source_data) > 0 "Source data cannot be empty"
     @assert ncol(source_data) > 0 "Source data must have columns"

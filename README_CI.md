@@ -1,8 +1,8 @@
-# CI/CD Setup for SDMXLLM.jl
+# CI/CD Setup for SDMXerWizard.jl
 
 ## Important: Unregistered Dependency
 
-SDMXLLM.jl depends on SDMX.jl, which is not yet registered in the Julia General registry. It's available at https://github.com/Baffelan/SDMX.jl
+SDMXerWizard.jl depends on SDMXer.jl, which is not yet registered in the Julia General registry. It's available at https://github.com/Baffelan/SDMXer.jl
 
 ## Local Development
 
@@ -16,13 +16,13 @@ Pkg.instantiate()
 
 ## CI/CD Environment Setup
 
-For CI/CD environments (GitHub Actions, GitLab CI, etc.), you need to explicitly add SDMX.jl from GitHub:
+For CI/CD environments (GitHub Actions, GitLab CI, etc.), you need to explicitly add SDMXer.jl from GitHub:
 
 ```julia
 using Pkg
 Pkg.activate(".")
 # Add unregistered dependency
-Pkg.add(url="https://github.com/Baffelan/SDMX.jl")
+Pkg.add(url="https://github.com/Baffelan/SDMXer.jl")
 # Install other dependencies
 Pkg.instantiate()
 # Run tests
@@ -54,7 +54,7 @@ COPY . .
 
 RUN julia -e 'using Pkg; \
     Pkg.activate("."); \
-    Pkg.add(url="https://github.com/Baffelan/SDMX.jl"); \
+    Pkg.add(url="https://github.com/Baffelan/SDMXer.jl"); \
     Pkg.instantiate(); \
     Pkg.precompile()'
 
@@ -64,6 +64,6 @@ CMD ["julia", "--project=.", "-e", "using Pkg; Pkg.test()"]
 ## Troubleshooting
 
 If you encounter "expected package to be registered" errors:
-1. Ensure you're adding SDMX.jl via URL, not just by name
+1. Ensure you're adding SDMXer.jl via URL, not just by name
 2. Clear any cached manifests that might reference a local path
-3. Use `Pkg.rm("SDMX")` followed by `Pkg.add(url="https://github.com/Baffelan/SDMX.jl")` to reset
+3. Use `Pkg.rm("SDMX")` followed by `Pkg.add(url="https://github.com/Baffelan/SDMXer.jl")` to reset

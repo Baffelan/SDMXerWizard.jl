@@ -1,22 +1,22 @@
 """
-SDMXLLM Plots Extension
+SDMXerWizard Plots Extension
 
-This extension provides visualization capabilities for SDMXLLM.jl when Plots.jl
+This extension provides visualization capabilities for SDMXerWizard.jl when Plots.jl
 is available. It enables users to create charts and visualizations for SDMX
 data analysis, source data profiling, and validation results.
 
 Only loaded when Plots.jl is imported by the user.
 """
 
-module SDMXLLMPlotsExt
+module SDMXerWizardPlotsExt
 
 # Only loaded when Plots is available
 if isdefined(Base, :get_extension)
     using Plots
-    using SDMX
-    using SDMXLLM
-    import SDMXLLM: plot_source_profile, plot_data_quality
-    import SDMX: plot_validation_results, visualize_schema_structure, create_sdmx_dashboard
+    using SDMXer
+    using SDMXerWizard
+    import SDMXerWizard: plot_source_profile, plot_data_quality
+    import SDMXer: plot_validation_results, visualize_schema_structure, create_sdmx_dashboard
 else
     # Fallback for older Julia versions
     @warn "Plots extension requires Julia 1.9+ with package extensions support"
@@ -41,7 +41,7 @@ source data profiling to help users understand their data before SDMX transforma
 # Examples
 ```julia
 # Requires: using Plots
-using DataFrames, SDMX, SDMXLLM, Plots
+using DataFrames, SDMXer, SDMXerWizard, Plots
 
 df = DataFrame(country=["USA", "Canada"], year=[2020, 2021], gdp=[21.4, 1.6])
 profile = profile_source_data(df)
@@ -65,25 +65,25 @@ function plot_source_profile(profile::SourceDataProfile; kwargs...)
         color=:green,
         legend=false
     )
-    
+
     # Column type distribution
     type_counts = Dict{String, Int}()
     for col in profile.columns
         type_name = string(col.type)
         type_counts[type_name] = get(type_counts, type_name, 0) + 1
     end
-    
+
     type_plot = pie(
         collect(values(type_counts)),
         labels=collect(keys(type_counts)),
         title="Column Type Distribution"
     )
-    
+
     # Missing value patterns
     missing_data = [(col.name, col.missing_count) for col in profile.columns]
     missing_names = [x[1] for x in missing_data]
     missing_counts = [x[2] for x in missing_data]
-    
+
     missing_plot = bar(
         missing_names,
         missing_counts,
@@ -92,15 +92,15 @@ function plot_source_profile(profile::SourceDataProfile; kwargs...)
         xrotation=45,
         color=:orange
     )
-    
+
     # SDMX role suggestions
     role_counts = [
         length(profile.suggested_key_columns),
-        length(profile.suggested_value_columns), 
+        length(profile.suggested_value_columns),
         length(profile.suggested_time_columns)
     ]
     role_labels = ["Dimensions", "Measures", "Time"]
-    
+
     role_plot = bar(
         role_labels,
         role_counts,
@@ -108,10 +108,10 @@ function plot_source_profile(profile::SourceDataProfile; kwargs...)
         ylabel="Column Count",
         color=[:blue, :red, :purple]
     )
-    
+
     # Combine plots
     layout = @layout [a b; c d]
-    plot(quality_plot, type_plot, missing_plot, role_plot, 
+    plot(quality_plot, type_plot, missing_plot, role_plot,
          layout=layout, size=(1000, 600), kwargs...)
 end
 
@@ -145,16 +145,16 @@ function plot_validation_results(result::ValidationResult; kwargs...)
     # Severity distribution
     severity_counts = Dict(
         "INFO" => 0,
-        "WARNING" => 0, 
+        "WARNING" => 0,
         "ERROR" => 0,
         "CRITICAL" => 0
     )
-    
+
     for issue in result.issues
         severity_str = string(issue.severity)
         severity_counts[severity_str] += 1
     end
-    
+
     severity_plot = bar(
         collect(keys(severity_counts)),
         collect(values(severity_counts)),
@@ -163,27 +163,27 @@ function plot_validation_results(result::ValidationResult; kwargs...)
         color=[:blue, :orange, :red, :purple],
         legend=false
     )
-    
+
     # Category breakdown
     category_counts = Dict{String, Int}()
     for issue in result.issues
         cat = issue.category
         category_counts[cat] = get(category_counts, cat, 0) + 1
     end
-    
+
     category_plot = pie(
         collect(values(category_counts)),
         labels=collect(keys(category_counts)),
         title="Issues by Category"
     )
-    
+
     # Overall status
     status_colors = Dict(
         "PASSED" => :green,
         "FAILED" => :red,
         "WARNING" => :orange
     )
-    
+
     status_plot = scatter(
         [1], [1],
         markersize=50,
@@ -193,7 +193,7 @@ function plot_validation_results(result::ValidationResult; kwargs...)
         showaxis=false,
         grid=false
     )
-    
+
     layout = @layout [a b; c]
     plot(severity_plot, category_plot, status_plot,
          layout=layout, size=(1000, 600), kwargs...)
@@ -228,14 +228,14 @@ function plot_data_quality(data::DataFrame, schema::DataflowSchema; kwargs...)
     # Completeness by column
     completeness = []
     col_names = []
-    
+
     for col in names(data)
         missing_pct = count(ismissing, data[!, col]) / nrow(data) * 100
         completeness_pct = 100 - missing_pct
         push!(completeness, completeness_pct)
         push!(col_names, col)
     end
-    
+
     completeness_plot = bar(
         col_names,
         completeness,
@@ -245,14 +245,14 @@ function plot_data_quality(data::DataFrame, schema::DataflowSchema; kwargs...)
         xrotation=45,
         color=:green
     )
-    
+
     # Data volume trends (if time dimension present)
     time_plot = plot(
         title="Data Volume Trends",
         xlabel="Time Period",
         ylabel="Record Count"
     )
-    
+
     if schema.time_dimension !== nothing
         time_col = schema.time_dimension.dimension_id
         if time_col in names(data)
@@ -260,12 +260,12 @@ function plot_data_quality(data::DataFrame, schema::DataflowSchema; kwargs...)
             plot!(time_plot, time_counts[!, time_col], time_counts.count,
                   marker=:circle, linewidth=2)
         else
-            plot!(time_plot, [1], [nrow(data)], 
+            plot!(time_plot, [1], [nrow(data)],
                   title="Total Records: $(nrow(data))",
                   marker=:circle, markersize=10)
         end
     end
-    
+
     layout = @layout [a; b]
     plot(completeness_plot, time_plot, layout=layout, size=(1000, 600), kwargs...)
 end
@@ -302,7 +302,7 @@ function visualize_schema_structure(schema::DataflowSchema; kwargs...)
         length(schema.attributes.attribute_id)
     ]
     component_labels = ["Dimensions", "Measures", "Attributes"]
-    
+
     overview_plot = bar(
         component_labels,
         component_counts,
@@ -311,7 +311,7 @@ function visualize_schema_structure(schema::DataflowSchema; kwargs...)
         color=[:blue, :red, :green],
         legend=false
     )
-    
+
     # Dimension positions
     if !isempty(schema.dimensions.position)
         pos_plot = scatter(
@@ -326,13 +326,13 @@ function visualize_schema_structure(schema::DataflowSchema; kwargs...)
     else
         pos_plot = plot(title="No Position Information Available")
     end
-    
+
     layout = @layout [a b]
     plot(overview_plot, pos_plot, layout=layout, size=(800, 400), kwargs...)
 end
 
 """
-    create_sdmx_dashboard(data::DataFrame, profile::SourceDataProfile, 
+    create_sdmx_dashboard(data::DataFrame, profile::SourceDataProfile,
                           validation::ValidationResult; kwargs...) -> Plots.Plot
 
 Create a comprehensive SDMX analysis dashboard combining multiple visualizations.
@@ -358,7 +358,7 @@ dashboard = create_sdmx_dashboard(my_data, profile, validation_result)
 # See also
 [`plot_source_profile`](@ref), [`plot_validation_results`](@ref), [`plot_data_quality`](@ref)
 """
-function create_sdmx_dashboard(data::DataFrame, profile::SourceDataProfile, 
+function create_sdmx_dashboard(data::DataFrame, profile::SourceDataProfile,
                                validation::ValidationResult; kwargs...)
     # Data overview
     overview_plot = bar(
@@ -368,11 +368,11 @@ function create_sdmx_dashboard(data::DataFrame, profile::SourceDataProfile,
         color=[:blue, :green, :orange],
         legend=false
     )
-    
+
     # Validation summary
     issue_count = length(validation.issues)
     status_color = validation.overall_status == :PASSED ? :green : :red
-    
+
     validation_plot = scatter(
         [1], [issue_count],
         markersize=30,
@@ -381,11 +381,11 @@ function create_sdmx_dashboard(data::DataFrame, profile::SourceDataProfile,
         legend=false,
         showaxis=false
     )
-    
+
     # Missing data heatmap (simplified)
     missing_pct = [col.missing_count / profile.row_count * 100 for col in profile.columns]
     col_names = [col.name for col in profile.columns]
-    
+
     missing_plot = bar(
         col_names,
         missing_pct,
@@ -394,11 +394,11 @@ function create_sdmx_dashboard(data::DataFrame, profile::SourceDataProfile,
         color=:red,
         alpha=0.7
     )
-    
+
     # SDMX readiness score
-    readiness_score = (profile.data_quality_score * 0.7 + 
+    readiness_score = (profile.data_quality_score * 0.7 +
                       (validation.overall_status == :PASSED ? 1.0 : 0.0) * 0.3) * 100
-    
+
     readiness_plot = scatter(
         [1], [readiness_score],
         markersize=40,
@@ -407,7 +407,7 @@ function create_sdmx_dashboard(data::DataFrame, profile::SourceDataProfile,
         ylims=(0, 100),
         legend=false
     )
-    
+
     layout = @layout [a b; c d]
     plot(overview_plot, validation_plot, missing_plot, readiness_plot,
          layout=layout, size=(1200, 800), kwargs...)
@@ -419,4 +419,4 @@ function __init__()
     @info "Available functions: plot_source_profile, plot_validation_results, plot_data_quality, visualize_schema_structure, create_sdmx_dashboard"
 end
 
-end # module SDMXLLMPlotsExt
+end # module SDMXerWizardPlotsExt

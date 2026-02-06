@@ -1,5 +1,5 @@
 """
-SDMX Workflow System for SDMX.jl
+SDMX Workflow System for SDMXer.jl
 
 This module provides an integrated workflow system that orchestrates the complete
 SDMX data transformation process from source analysis to script generation and validation.
@@ -10,7 +10,7 @@ Features:
 - Configurable pipeline with custom steps and parameters
 - Comprehensive logging and error handling
 - Support for batch processing and automation
-- Integration with all SDMX.jl components
+- Integration with all SDMXer.jl components
 
 The workflow follows these main phases:
 1. Source Data Analysis & Profiling

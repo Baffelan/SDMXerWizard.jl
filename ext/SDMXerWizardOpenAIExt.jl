@@ -1,20 +1,20 @@
 """
-SDMX OpenAI Extension
+SDMXerWizard OpenAI Extension
 
-This extension provides direct OpenAI API integration for SDMXLLM.jl when OpenAI.jl
+This extension provides direct OpenAI API integration for SDMXerWizard.jl when OpenAI.jl
 is available. It enables users who prefer direct OpenAI API calls over PromptingTools.jl
 abstractions to use OpenAI-specific features and configurations.
 
 Only loaded when OpenAI.jl is imported by the user.
 """
 
-module SDMXOpenAIExt
+module SDMXerWizardOpenAIExt
 
 # Only loaded when OpenAI is available
 if isdefined(Base, :get_extension)
     using OpenAI
-    using SDMXLLM
-    import SDMXLLM: generate_transformation_script_openai, query_openai_direct, 
+    using SDMXerWizard
+    import SDMXerWizard: generate_transformation_script_openai, query_openai_direct,
                     create_openai_mapping, analyze_excel_with_openai
 else
     # Fallback for older Julia versions
@@ -75,22 +75,22 @@ function generate_transformation_script_openai(prompt::String; model="gpt-4", kw
     3. Code list validation
     4. Data quality checks
     5. SDMX-CSV output format
-    
+
     Return only executable Julia code using Tidier.jl syntax.
     """
-    
+
     messages = [
         Dict("role" => "system", "content" => system_prompt),
         Dict("role" => "user", "content" => prompt)
     ]
-    
+
     try
         response = OpenAI.create_chat(
             model,
             messages;
             kwargs...
         )
-        
+
         return response.choices[1].message.content
     catch e
         throw(OpenAI.APIError("Failed to generate transformation script: $(e.message)"))
@@ -107,7 +107,7 @@ specific OpenAI features or configurations not available through PromptingTools.
 
 # Arguments
 - `prompt::String`: Query prompt
-- `model="gpt-4"`: OpenAI model to use  
+- `model="gpt-4"`: OpenAI model to use
 - `kwargs...`: OpenAI API parameters
 
 # Returns
@@ -134,7 +134,7 @@ response = query_openai_direct(
 """
 function query_openai_direct(prompt::String; model="gpt-4", kwargs...)
     messages = [Dict("role" => "user", "content" => prompt)]
-    
+
     response = OpenAI.create_chat(model, messages; kwargs...)
     return response.choices[1].message.content
 end
@@ -178,17 +178,17 @@ function create_openai_mapping(source_data::DataFrame, target_schema::Dict; kwar
     - Columns: $(names(source_data))
     - Sample values: $(first(source_data, 3))
     - Data types: $(eltype.(eachcol(source_data)))
-    
+
     Target SDMX Schema:
     $(JSON3.write(target_schema, allow_inf=true))
     """
-    
+
     prompt = """
     Analyze the source data and create mappings to the SDMX schema.
     Return a JSON object with mapping suggestions including confidence scores (0-1).
-    
+
     $data_summary
-    
+
     Format:
     {
         "mappings": {
@@ -200,13 +200,13 @@ function create_openai_mapping(source_data::DataFrame, target_schema::Dict; kwar
         }
     }
     """
-    
+
     response = query_openai_direct(
-        prompt; 
+        prompt;
         response_format=Dict("type" => "json_object"),
         kwargs...
     )
-    
+
     return JSON3.read(response)
 end
 
@@ -244,16 +244,16 @@ function analyze_excel_with_openai(file_path::String; kwargs...)
     if !isfile(file_path)
         throw(ArgumentError("File not found: $file_path"))
     end
-    
+
     # Basic Excel analysis
     sheets = XLSX.sheetnames(XLSX.readxlsx(file_path))
-    
+
     prompt = """
     Analyze this Excel file for SDMX data transformation:
-    
+
     File: $file_path
     Sheets: $sheets
-    
+
     Provide analysis including:
     1. Data structure assessment
     2. Pivot table detection
@@ -261,16 +261,16 @@ function analyze_excel_with_openai(file_path::String; kwargs...)
     4. Data quality indicators
     5. Transformation complexity score (1-10)
     6. Recommended approach
-    
+
     Return structured JSON response.
     """
-    
+
     response = query_openai_direct(
         prompt;
         response_format=Dict("type" => "json_object"),
         kwargs...
     )
-    
+
     return JSON3.read(response)
 end
 
@@ -280,4 +280,4 @@ function __init__()
     @info "Available functions: generate_transformation_script_openai, query_openai_direct, create_openai_mapping, analyze_excel_with_openai"
 end
 
-end # module SDMXOpenAIExt
+end # module SDMXerWizardOpenAIExt

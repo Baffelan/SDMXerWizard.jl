@@ -1,5 +1,5 @@
 """
-Julia-idiomatic Data Source Type Hierarchy for SDMX.jl
+Julia-idiomatic Data Source Type Hierarchy for SDMXer.jl
 
 This module defines an abstract type hierarchy for different data sources,
 leveraging Julia's multiple dispatch for clean, extensible data ingestion.
@@ -12,7 +12,7 @@ leveraging Julia's multiple dispatch for clean, extensible data ingestion.
 """
     DataSource
 
-Abstract base type for all data sources in SDMX.jl.
+Abstract base type for all data sources in SDMXer.jl.
 All concrete data source types should inherit from this hierarchy.
 """
 abstract type DataSource end
