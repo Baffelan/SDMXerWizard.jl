@@ -16,10 +16,14 @@ This module provides streamlined AI-powered analysis using PromptingTools.jl:
 "Provider types for LLM configuration"
 @enum LLMProvider begin
     OPENAI
-    ANTHROPIC 
+    ANTHROPIC
     OLLAMA
     MISTRAL
     AZURE_OPENAI
+    GROQ
+    TOGETHER
+    FIREWORKS
+    DATABRICKS
     GOOGLE
 end
 
@@ -37,6 +41,10 @@ function llm_provider(s::Symbol)::LLMProvider
     s === :ollama && return OLLAMA
     s === :mistral && return MISTRAL
     s === :azure_openai && return AZURE_OPENAI
+    s === :groq && return GROQ
+    s === :together && return TOGETHER
+    s === :fireworks && return FIREWORKS
+    s === :databricks && return DATABRICKS
     s === :google && return GOOGLE
     error("Unknown LLM provider: $s")
 end
@@ -55,11 +63,11 @@ end
 """
 Supported LLM providers with their PromptingTools.jl schemas and capabilities
 """
-const SDMX_PROVIDERS = Dict{Symbol, NamedTuple}(
+const LLM_PROVIDERS = Dict{Symbol, NamedTuple}(
     :openai => (
         schema = PromptingTools.OpenAISchema(),
         supports = [:generation, :extraction, :embedding, :classification],
-        default_model = "gpt-4o",
+        default_model = "gpt-5.1-codex-mini",
         description = "OpenAI GPT models"
     ),
     :anthropic => (
@@ -79,6 +87,12 @@ const SDMX_PROVIDERS = Dict{Symbol, NamedTuple}(
         supports = [:generation, :extraction, :embedding],
         default_model = "mistral-large",
         description = "Mistral AI models"
+    ),
+    :azure_openai => (
+        schema = PromptingTools.AzureOpenAISchema(),
+        supports = [:generation, :extraction, :embedding, :classification],
+        default_model = "gpt-4o",
+        description = "Azure OpenAI models"
     ),
     :groq => (
         schema = PromptingTools.GroqOpenAISchema(),
@@ -111,6 +125,10 @@ const SDMX_PROVIDERS = Dict{Symbol, NamedTuple}(
         description = "Google Gemini models"
     )
 )
+
+const _LLM_PROVIDER_ENUM_SYMBOLS = Set(Symbol(lowercase(string(p))) for p in instances(LLMProvider))
+const _LLM_PROVIDER_REGISTRY_SYMBOLS = Set(keys(LLM_PROVIDERS))
+@assert _LLM_PROVIDER_ENUM_SYMBOLS == _LLM_PROVIDER_REGISTRY_SYMBOLS "LLMProvider enum and LLM_PROVIDERS keys must match"
 
 # =================== STRUCTURED RESPONSE TYPES ===================
 
@@ -175,8 +193,8 @@ Optionally loads API keys from a YAML .env file.
 - `env_file`: Path to YAML .env file containing API keys (optional)
 
 # Important Note for Google AI
-⚠️ **Google AI Requirement**: The `GOOGLE_API_KEY` environment variable must be set 
-BEFORE importing SDMXerWizard. The `.env` file loading will set the variable for future 
+⚠️ **Google AI Requirement**: The `GOOGLE_API_KEY` environment variable must be set
+BEFORE importing SDMXerWizard. The `.env` file loading will set the variable for future
 imports but cannot affect already-loaded GoogleGenAI.jl.
 
 ```julia
@@ -219,24 +237,24 @@ function setup_sdmx_llm(provider::Union{Symbol, LLMProvider}=:openai; model::Str
     if env_file !== nothing
         _load_api_keys_from_env(env_file)
     end
-    
+
     # Convert symbol to enum if needed
     provider_enum = isa(provider, Symbol) ? llm_provider(provider) : provider
-    
+
     # Special warning for Google provider
     if provider_enum === GOOGLE && !haskey(ENV, "GOOGLE_API_KEY")
-        @warn "GOOGLE_API_KEY not found in environment!" * 
+        @warn "GOOGLE_API_KEY not found in environment!" *
               "\n  Google AI requires the API key to be set BEFORE importing SDMXerWizard." *
               "\n  Please use the init_sdmx_google.jl helper script or set ENV[\"GOOGLE_API_KEY\"] before import." *
               "\n  See the README for detailed instructions."
     end
-    
+
     # Set provider-specific defaults optimized for SDMX tasks
     model = _get_default_model(provider_enum, model)
-    
+
     # Configure PromptingTools.jl model alias
     !isempty(model) && (PromptingTools.MODEL_ALIASES["sdmx_model"] = model)
-    
+
     @info "SDMX LLM configured: provider=" * string(provider_enum) * ", model=" * model
     return provider_enum
 end
@@ -244,31 +262,46 @@ end
 # Load API keys from YAML .env file
 function _load_api_keys_from_env(env_file::String)
     @assert isfile(env_file) "Environment file not found at: " * env_file
-    
+
     config = YAML.load_file(env_file)
-    
+
     # Set environment variables for PromptingTools.jl
     for (key, value) in config
         if endswith(key, "_API_KEY") || endswith(key, "_ENDPOINT")
             ENV[key] = string(value)
         end
     end
-    
+
     @info "API keys loaded from " * env_file
 end
 
 # Get default model for each provider
 function _get_default_model(provider::LLMProvider, model::String)::String
     !isempty(model) && return model
-    
-    provider === OPENAI && return "gpt-4o"
+
+    provider === OPENAI && return "gpt-5.1-codex-mini"
     provider === ANTHROPIC && return "claude-3-5-sonnet-20241022"
     provider === OLLAMA && return "llama3.1:8b"
     provider === MISTRAL && return "mistral-large"
     provider === AZURE_OPENAI && return "gpt-4o"
+    provider === GROQ && return "llama-3.1-70b-versatile"
+    provider === TOGETHER && return "meta-llama/Llama-3-70b-chat-hf"
+    provider === FIREWORKS && return "accounts/fireworks/models/llama-v3-70b-instruct"
+    provider === DATABRICKS && return "databricks-meta-llama-3-70b-instruct"
     provider === GOOGLE && return "gemini-2.5-flash"
-    
+
     return ""
+end
+
+# Response-only OpenAI models require Responses API schema
+function _is_response_only_openai_model(model_name::String)::Bool
+    isempty(model_name) && return false
+    name = lowercase(model_name)
+    return startswith(name, "gpt-5") || startswith(name, "o1") || startswith(name, "o3") || startswith(name, "o4")
+end
+
+function _select_openai_schema(model_name::String)
+    return _is_response_only_openai_model(model_name) ? PromptingTools.OpenAIResponseSchema() : PromptingTools.OpenAISchema()
 end
 
 # =================== DATA PREPARATION FUNCTIONS ===================
@@ -353,9 +386,9 @@ Creates a reusable prompt template for column mapping tasks.
 """
 function create_mapping_template()
     return PromptingTools.create_template(
-        """You are an expert in SDMX (Statistical Data and Metadata eXchange) standards. 
+        """You are an expert in SDMX (Statistical Data and Metadata eXchange) standards.
         You analyze source data columns and suggest mappings to SDMX dimensions and attributes.
-        
+
         Provide structured, confident mappings with clear reasoning.
         Focus on standard SDMX dimensions like FREQ, GEO_PICT, INDICATOR, TIME_PERIOD, OBS_VALUE.
         """,
@@ -363,19 +396,19 @@ function create_mapping_template()
 
         **Source Data Preview:**
         {{data_preview}}
-        
+
         **Available SDMX Dimensions:**
         {{sdmx_dimensions}}
-        
+
         **SDMX Schema Context:**
         {{schema_context}}
-        
+
         For each source column, provide:
         1. Best SDMX dimension/attribute match
-        2. Confidence score (0.0-1.0) 
+        2. Confidence score (0.0-1.0)
         3. Required transformations
         4. Any concerns or notes
-        
+
         Return analysis as SDMXMappingResult struct.""",
         load_as="sdmx_mapping"
     )
@@ -390,7 +423,7 @@ function create_script_template()
     return PromptingTools.create_template(
         """You are an expert Julia programmer specializing in data transformation for SDMX compliance.
         Generate efficient, readable transformation scripts using DataFrames.jl or Tidier.jl.
-        
+
         Follow Julia best practices:
         - Use descriptive variable names
         - Include helpful comments
@@ -401,25 +434,25 @@ function create_script_template()
 
         **Source Data Structure:**
         {{source_structure}}
-        
+
         **Target SDMX Schema:**
         {{target_schema}}
-        
+
         **Column Mappings:**
         {{column_mappings}}
-        
+
         **Transformation Requirements:**
         {{transformation_requirements}}
-        
+
         **Preferred Style:**
         {{script_style}}  # "dataframes" or "tidier"
-        
+
         Generate a complete, executable Julia script that:
         1. Reads the source data
         2. Applies all necessary transformations
         3. Validates the output against SDMX requirements
         4. Exports clean SDMX-compliant data
-        
+
         Return as SDMXTransformationScript struct.""",
         load_as="sdmx_script"
     )
@@ -443,13 +476,13 @@ function create_excel_analysis_template()
 
         **File Information:**
         {{file_info}}
-        
+
         **Sheet Overview:**
         {{sheet_info}}
-        
+
         **Sample Data from Each Sheet:**
         {{sample_data}}
-        
+
         Determine:
         1. Which sheet contains the main data
         2. Exact data range (start/end rows and columns)
@@ -457,7 +490,7 @@ function create_excel_analysis_template()
         4. Whether data is in pivot/cross-tab format
         5. Any data quality issues
         6. Recommended preprocessing steps
-        
+
         Return as ExcelStructureAnalysis struct.""",
         load_as="excel_analysis"
     )
@@ -513,15 +546,16 @@ response = sdmx_aigenerate(
 """
 function sdmx_aigenerate(prompt::String; provider::Symbol=:ollama, model::String="", kwargs...)
     @assert !isempty(prompt) "Prompt cannot be empty"
-    
-    provider_info = get(SDMX_PROVIDERS, provider, nothing)
-    @assert provider_info !== nothing "Unsupported provider: " * string(provider) * ". Available: " * join(keys(SDMX_PROVIDERS), ", ")
+
+    provider_info = get(LLM_PROVIDERS, provider, nothing)
+    @assert provider_info !== nothing "Unsupported provider: " * string(provider) * ". Available: " * join(keys(LLM_PROVIDERS), ", ")
     @assert :generation in provider_info.supports "Provider " * string(provider) * " doesn't support text generation"
-    
+
     # Use default model if none specified
     model_name = isempty(model) ? provider_info.default_model : model
-    
-    return PromptingTools.aigenerate(provider_info.schema, prompt; model=model_name, kwargs...)
+
+    schema = provider === :openai ? _select_openai_schema(model_name) : provider_info.schema
+    return PromptingTools.aigenerate(schema, prompt; model=model_name, kwargs...)
 end
 
 """
@@ -531,21 +565,22 @@ Extract structured data using specified provider. Falls back to text generation 
 """
 function sdmx_aiextract(return_type::Type, prompt::String; provider::Symbol=:openai, model::String="", kwargs...)
     @assert !isempty(prompt) "Prompt cannot be empty"
-    
-    provider_info = get(SDMX_PROVIDERS, provider, nothing)
+
+    provider_info = get(LLM_PROVIDERS, provider, nothing)
     @assert provider_info !== nothing "Unsupported provider: " * string(provider)
-    
+
     model_name = isempty(model) ? provider_info.default_model : model
-    
+
     if :extraction in provider_info.supports
-        return PromptingTools.aiextract(provider_info.schema, prompt; model=model_name, return_type=return_type, kwargs...)
+        schema = provider === :openai ? _select_openai_schema(model_name) : provider_info.schema
+        return PromptingTools.aiextract(schema, prompt; model=model_name, return_type=return_type, kwargs...)
     else
         @warn "Provider " * string(provider) * " doesn't support extraction, falling back to generation"
         # Format prompt for manual extraction
         structured_prompt = prompt * """
-        
+
         Please format your response as valid Julia data that can be parsed into the requested type: """ * string(return_type)
-        
+
         result = PromptingTools.aigenerate(provider_info.schema, structured_prompt; model=model_name, kwargs...)
         return result.content  # Return raw content for manual parsing
     end
@@ -562,20 +597,20 @@ function analyze_excel_with_ai(file_path::String; model::String="sdmx_model")
     # Read Excel metadata functionally
     xf = XLSX.readxlsx(file_path)
     sheet_names = XLSX.sheetnames(xf)
-    
+
     # Prepare file information as named tuple
     file_info = (
         filename = basename(file_path),
         num_sheets = length(sheet_names),
         sheet_names = sheet_names
     )
-    
+
     # Sample sheets functionally
     sheet_samples = _sample_sheets(file_path, sheet_names)
-    
+
     # Use AI to analyze structure
     template = create_excel_analysis_template()
-    
+
     return aiextract(
         ExcelStructureAnalysis,
         template;
@@ -587,7 +622,7 @@ function analyze_excel_with_ai(file_path::String; model::String="sdmx_model")
 end
 
 """
-    infer_column_mappings(data::DataFrame, schema::DataflowSchema; 
+    infer_column_mappings(data::DataFrame, schema::DataflowSchema;
                          model::String="sdmx_model") -> SDMXMappingResult
 
 Uses AI to suggest optimal column mappings from source data to SDMX schema.
@@ -596,13 +631,13 @@ function infer_column_mappings(data::DataFrame, schema::DataflowSchema; model::S
     # Prepare data and schema contexts functionally
     data_preview = prepare_data_preview(data)
     schema_context = prepare_schema_context(schema)
-    
+
     # Extract dimensions for context
     sdmx_dimensions = schema_context.available_dimensions
-    
+
     # Use AI to infer mappings
     template = create_mapping_template()
-    
+
     return aiextract(
         SDMXMappingResult,
         template;
@@ -615,7 +650,7 @@ end
 
 """
     generate_transformation_script(mappings::SDMXMappingResult, schema::DataflowSchema;
-                                  script_style::Union{Symbol, ScriptStyle}=:dataframes, 
+                                  script_style::Union{Symbol, ScriptStyle}=:dataframes,
                                   model::String="sdmx_model") -> SDMXTransformationScript
 
 Uses AI to generate a complete Julia transformation script based on column mappings.
@@ -623,25 +658,25 @@ Uses AI to generate a complete Julia transformation script based on column mappi
 function generate_transformation_script(mappings::SDMXMappingResult, schema::DataflowSchema;
                                        script_style::Union{Symbol, ScriptStyle}=:dataframes,
                                        model::String="sdmx_model")
-    
+
     # Convert symbol to enum if needed
     style_enum = isa(script_style, Symbol) ? script_style_enum(script_style) : script_style
-    
+
     # Prepare contexts functionally
     source_structure = prepare_source_structure(mappings)
     target_schema = prepare_schema_context(schema)
-    
+
     # Default transformation requirements
     transformation_requirements = (
         "Handle missing values appropriately",
-        "Validate against SDMX requirements", 
+        "Validate against SDMX requirements",
         "Include data quality checks",
         "Export to SDMX-CSV format"
     )
-    
+
     # Use AI to generate script
     template = create_script_template()
-    
+
     return aiextract(
         SDMXTransformationScript,
         template;
@@ -657,27 +692,27 @@ end
 # =================== CONVENIENCE FUNCTIONS ===================
 
 """
-    ai_sdmx_workflow(file_path::String, schema::DataflowSchema; 
+    ai_sdmx_workflow(file_path::String, schema::DataflowSchema;
                     model::String="sdmx_model",
                     script_style::Union{Symbol, ScriptStyle}=:dataframes) -> NamedTuple
 
 Complete AI-powered workflow: Excel analysis → column mapping → script generation.
 Returns named tuple with all workflow results.
 """
-function ai_sdmx_workflow(file_path::String, schema::DataflowSchema; 
+function ai_sdmx_workflow(file_path::String, schema::DataflowSchema;
                          model::String="sdmx_model",
                          script_style::Union{Symbol, ScriptStyle}=:dataframes)
-    
+
     @info "Starting AI-powered SDMX workflow for $file_path"
-    
+
     # Execute workflow steps functionally
     excel_analysis = _analyze_excel_step(file_path, model)
     data = _load_data_step(file_path, excel_analysis)
     mappings = _infer_mappings_step(data, schema, model)
     script = _generate_script_step(mappings, schema, script_style, model)
-    
+
     @info "AI workflow completed successfully!"
-    
+
     return (
         excel_analysis = excel_analysis,
         data = data,
@@ -695,7 +730,7 @@ end
 # Execute data loading step (internal function)
 function _load_data_step(file_path::String, excel_analysis)
     @info "Step 2: Loading data from recommended sheet: \$(excel_analysis.recommended_sheet)"
-    return XLSX.readtable(file_path, excel_analysis.recommended_sheet, 
+    return XLSX.readtable(file_path, excel_analysis.recommended_sheet,
                          first_row=excel_analysis.header_row) |> DataFrame
 end
 
@@ -708,7 +743,7 @@ end
 # Execute script generation step (internal function)
 function _generate_script_step(mappings, schema, script_style, model::String)
     @info "Step 4: Generating transformation script..."
-    return generate_transformation_script(mappings, schema; 
+    return generate_transformation_script(mappings, schema;
                                         script_style=script_style, model=model)
 end
 
@@ -716,7 +751,7 @@ end
 # These provide simpler text-based interfaces as alternatives to structured responses
 
 """
-    infer_sdmx_column_mappings(source_columns::Vector{String}, target_schema; 
+    infer_sdmx_column_mappings(source_columns::Vector{String}, target_schema;
                               provider::Symbol=:ollama, model::String="")
 
 Infer optimal column mappings from source data to SDMX schema using LLM analysis.
@@ -741,10 +776,10 @@ response = infer_sdmx_column_mappings(columns, schema)
 println(response.content)
 ```
 """
-function infer_sdmx_column_mappings(source_columns::Vector{String}, target_schema; 
+function infer_sdmx_column_mappings(source_columns::Vector{String}, target_schema;
                                    provider::Symbol=:ollama, model::String="")
     @assert !isempty(source_columns) "Source columns cannot be empty"
-    
+
     # Extract schema information - handle both DataflowSchema and Dict
     if hasfield(typeof(target_schema), :dimensions) && hasfield(typeof(target_schema), :measures)
         # Handle DataflowSchema
@@ -757,43 +792,48 @@ function infer_sdmx_column_mappings(source_columns::Vector{String}, target_schem
     else
         error("Invalid target schema type: " * string(typeof(target_schema)))
     end
-    
+
     prompt = """
-    You are an SDMX (Statistical Data and Metadata eXchange) expert. 
-    
+    You are an SDMX (Statistical Data and Metadata eXchange) expert.
+
     Source data columns: """ * join(source_columns, ", ") * """
-    
+
     Target SDMX dimensions: """ * join(dimensions, ", ") * """
     Target SDMX measures: """ * join(measures, ", ") * """
-    
+
     Suggest optimal column mappings from source to SDMX schema.
     Focus on standard SDMX patterns:
-    - Geographic areas → GEO_PICT 
+    - Geographic areas → GEO_PICT
     - Time periods → TIME_PERIOD
     - Statistical indicators → INDICATOR
     - Observed values → OBS_VALUE
     - Units of measure → UNIT_MEASURE
-    
+
     For each mapping, provide:
     1. Source column → Target SDMX dimension/measure
     2. Confidence level (high/medium/low)
     3. Required transformations or notes
-    
+
     Be specific and actionable.
     """
-    
+
     # Get provider configuration
     provider_enum = isa(provider, Symbol) ? llm_provider(provider) : provider
     model_name = isempty(model) ? _get_default_model(provider_enum, model) : model
-    
-    # Use PromptingTools directly for simpler text response
-    return PromptingTools.aigenerate(prompt; model=model_name)
+
+    # Use provider registry to resolve schema
+    provider_key = isa(provider, Symbol) ? provider : Symbol(lowercase(string(provider_enum)))
+    provider_info = get(LLM_PROVIDERS, provider_key, nothing)
+    @assert provider_info !== nothing "Unsupported provider: " * string(provider_key)
+
+    schema = provider === :openai ? _select_openai_schema(model_name) : provider_info.schema
+    return PromptingTools.aigenerate(schema, prompt; model=model_name)
 end
 
 """
-    generate_transformation_script_text(mappings::String, schema_info; 
-                                       provider::Symbol=:ollama, model::String="", 
-                                       style::Symbol=:tidier, 
+    generate_transformation_script_text(mappings::String, schema_info;
+                                       provider::Symbol=:ollama, model::String="",
+                                       style::Symbol=:tidier,
                                        excel_analysis::Union{ExcelStructureAnalysis, Nothing}=nothing)
 
 Generate Julia transformation script from text-based mappings.
@@ -817,13 +857,13 @@ script = generate_transformation_script_text(mappings, schema)
 println(script.content)
 ```
 """
-function generate_transformation_script_text(mappings::String, schema_info; 
-                                            provider::Symbol=:ollama, model::String="", 
-                                            style::Symbol=:tidier, 
+function generate_transformation_script_text(mappings::String, schema_info;
+                                            provider::Symbol=:ollama, model::String="",
+                                            style::Symbol=:tidier,
                                             excel_analysis::Union{ExcelStructureAnalysis, Nothing}=nothing)
     @assert !isempty(mappings) "Column mappings cannot be empty"
     @assert style in [:tidier, :dataframes, :mixed] "Style must be :tidier, :dataframes, or :mixed"
-    
+
     style_instruction = if style == :tidier
         "Use Tidier.jl syntax (@select, @mutate, @filter, @pivot_longer, etc.)"
     elseif style == :dataframes
@@ -831,11 +871,11 @@ function generate_transformation_script_text(mappings::String, schema_info;
     else
         "Use a mix of DataFrames.jl and Tidier.jl as appropriate"
     end
-    
+
     # Add Excel analysis context if available
     excel_context = if excel_analysis !== nothing
         """
-        
+
         Excel Analysis Context:
         - Complexity Score: """ * string(excel_analysis.complexity_score) * """
         - Pivoting Detected: """ * string(excel_analysis.pivoting_detected) * """
@@ -844,39 +884,44 @@ function generate_transformation_script_text(mappings::String, schema_info;
     else
         ""
     end
-    
+
     schema_description = if isa(schema_info, DataflowSchema)
         "Dataflow: " * schema_info.dataflow_info.name
     else
         string(schema_info)
     end
-    
+
     prompt = """
     Generate a complete Julia script to transform data for SDMX compliance.
-    
+
     Column mappings identified:
     """ * mappings * """
-    
+
     Target SDMX schema information:
     """ * schema_description * excel_context * """
-    
+
     Requirements:
     1. """ * style_instruction * """
     2. Read source data (assume CSV format unless Excel context suggests otherwise)
     3. Apply all necessary transformations based on the mappings
     4. Handle missing data appropriately with @assert statements
-    5. Validate output against SDMX requirements  
+    5. Validate output against SDMX requirements
     6. Export clean SDMX-CSV format
     7. Include comprehensive error handling
     8. Add clear comments explaining each transformation step
-    
+
     Generate complete, executable Julia code only.
     """
-    
+
     # Get provider configuration
     provider_enum = isa(provider, Symbol) ? llm_provider(provider) : provider
     model_name = isempty(model) ? _get_default_model(provider_enum, model) : model
-    
-    # Use PromptingTools directly for simpler text response
-    return PromptingTools.aigenerate(prompt; model=model_name)
+
+    # Use provider registry to resolve schema
+    provider_key = isa(provider, Symbol) ? provider : Symbol(lowercase(string(provider_enum)))
+    provider_info = get(LLM_PROVIDERS, provider_key, nothing)
+    @assert provider_info !== nothing "Unsupported provider: " * string(provider_key)
+
+    schema = provider === :openai ? _select_openai_schema(model_name) : provider_info.schema
+    return PromptingTools.aigenerate(schema, prompt; model=model_name)
 end

@@ -112,6 +112,8 @@ setup_sdmx_llm(:openai; model="gpt-4")
 setup_sdmx_llm(:openai; model="gpt-4", env_file=".env")
 ```
 
+**Automatic Responses API selection:** when you use response-only OpenAI models (`gpt-5*`, `o1*`, `o3*`, `o4*`), SDMXerWizard automatically switches to PromptingTools’ `OpenAIResponseSchema` (Responses API). This avoids 404s and ensures GPT‑5/Codex models work without manual changes.
+
 #### Google Gemini
 
 ```julia

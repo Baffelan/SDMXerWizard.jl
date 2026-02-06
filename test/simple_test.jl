@@ -1,6 +1,7 @@
 using Test
 using SDMXer
 using SDMXerWizard
+using PromptingTools
 using DataFrames
 
 @testset "SDMXerWizard Basic Tests" begin
@@ -13,6 +14,13 @@ using DataFrames
         # Test that enums are exported
         @test SDMXerWizard.OLLAMA isa SDMXerWizard.LLMProvider
         @test SDMXerWizard.OPENAI isa SDMXerWizard.LLMProvider
+
+        # Test automatic Responses API schema selection for response-only models
+        response_schema = SDMXerWizard._select_openai_schema("gpt-5.1-codex-mini")
+        @test response_schema isa PromptingTools.OpenAIResponseSchema
+
+        chat_schema = SDMXerWizard._select_openai_schema("gpt-4o")
+        @test chat_schema isa PromptingTools.OpenAISchema
     end
 
     @testset "Data Sources" begin

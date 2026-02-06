@@ -25,7 +25,7 @@ export CSVSource, ExcelSource, URLSource, DataFrameSource
 
 # LLM Provider Configuration - Enumeration types for LLM providers and output styles
 export LLMProvider, ScriptStyle
-export OPENAI, ANTHROPIC, OLLAMA, MISTRAL, AZURE_OPENAI, GOOGLE
+export OPENAI, ANTHROPIC, OLLAMA, MISTRAL, AZURE_OPENAI, GROQ, TOGETHER, FIREWORKS, DATABRICKS, GOOGLE
 export DATAFRAMES, TIDIER, MIXED
 
 # Result & Analysis Types - Data structures for LLM analysis results and transformations
@@ -39,7 +39,7 @@ export PromptTemplate, TransformationScenario, ComprehensivePrompt
 # Template & Scenario Constants - Predefined templates and scenarios for common use cases
 export TIDIER_TEMPLATE, DATAFRAMES_TEMPLATE, MIXED_TEMPLATE
 export EXCEL_SCENARIO, CSV_SCENARIO, PIVOTING_SCENARIO, CODE_MAPPING_SCENARIO
-export SDMX_PROVIDERS
+export LLM_PROVIDERS
 
 # === DATA SOURCE OPERATIONS ===
 # Functions for reading and validating data from various source types
