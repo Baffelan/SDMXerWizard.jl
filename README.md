@@ -84,6 +84,37 @@ script = generate_transformation_script(
 write("transform_to_sdmx.jl", script.generated_code)
 ```
 
+### Anonymization Workflow (Privacy-Preserving)
+
+SDMXerWizard includes AI-free anonymization to keep raw data out of LLM prompts while preserving structure, types, and cardinality patterns.
+
+```julia
+using SDMXerWizard
+
+schema = extract_dataflow_schema(url)
+source_data = read_source_data("my_data.csv")
+profile = profile_source_data(source_data, "my_data.csv")
+
+# Deterministic anonymization (safe default)
+anon = anonymize_source_data(
+    source_data, profile;
+    target_schema=schema
+)
+
+# Optional: preserve numeric distributions with quantile buckets
+cfg = AnonymizationConfig(:preserve_distribution, 1000, 50, true, true)
+anon_q = anonymize_source_data(
+    source_data, profile;
+    target_schema=schema,
+    config=cfg
+)
+
+# Summarize anonymized data for LLM prompts
+summary = summarize_anonymized_data(anon; max_samples=5)
+```
+
+**Recommended usage in prompts:** always call `anonymize_source_data(...; target_schema=...)` before building any LLM-oriented summaries or inspections. This keeps privacy-safe tokens while still aligning with SDMX target identifiers.
+
 ## LLM Provider Configuration
 
 ### Local Models (Ollama)

@@ -835,20 +835,36 @@ function load_codelist_data!(engine::InferenceEngine, target_schema::DataflowSch
         end
     end
 
-    # Load codelists that aren't already cached
-    for codelist_id in codelist_refs
-        if !haskey(engine.codelists_data, codelist_id)
-            try
-                # This would normally load from the same SDMX endpoint
-                # For now, we'll create a placeholder
-                engine.codelists_data[codelist_id] = DataFrame(
-                    code_id = ["CODE1", "CODE2", "CODE3"],
-                    name = ["Name 1", "Name 2", "Name 3"]
-                )
-            catch e
-                @warn "Could not load codelist $codelist_id: $e"
+    if isempty(codelist_refs)
+        return
+    end
+
+    dataflow_url = nothing
+    if hasproperty(target_schema.dataflow_info, :url)
+        dataflow_url = getproperty(target_schema.dataflow_info, :url)
+    elseif hasproperty(target_schema.dataflow_info, :source_url)
+        dataflow_url = getproperty(target_schema.dataflow_info, :source_url)
+    end
+
+    if dataflow_url === nothing || isempty(string(dataflow_url))
+        @warn "No dataflow URL found in schema metadata; cannot fetch codelists. Provide a schema built from a URL or extend dataflow_info with :url."
+        return
+    end
+
+    try
+        codelists_df = extract_all_codelists(string(dataflow_url))
+        for codelist_id in codelist_refs
+            if !haskey(engine.codelists_data, codelist_id)
+                rows = filter(row -> row.codelist_id == codelist_id, codelists_df)
+                if nrow(rows) > 0
+                    engine.codelists_data[codelist_id] = rows
+                else
+                    @warn "Codelist $codelist_id not found in retrieved codelists for $dataflow_url"
+                end
             end
         end
+    catch e
+        @warn "Could not load codelists from $dataflow_url: $e"
     end
 end
 

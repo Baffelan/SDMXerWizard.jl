@@ -629,7 +629,8 @@ Uses AI to suggest optimal column mappings from source data to SDMX schema.
 """
 function infer_column_mappings(data::DataFrame, schema::DataflowSchema; model::String="sdmx_model")
     # Prepare data and schema contexts functionally
-    data_preview = prepare_data_preview(data)
+    anonymized_data = anonymize_source_data(data)
+    data_preview = summarize_anonymized_data(anonymized_data)
     schema_context = prepare_schema_context(schema)
 
     # Extract dimensions for context
@@ -877,10 +878,11 @@ function generate_transformation_script_text(mappings::String, schema_info;
         """
 
         Excel Analysis Context:
-        - Complexity Score: """ * string(excel_analysis.complexity_score) * """
-        - Pivoting Detected: """ * string(excel_analysis.pivoting_detected) * """
+        - Pivoting Detected: """ * string(excel_analysis.pivot_structure_detected) * """
         - Recommended Sheet: """ * excel_analysis.recommended_sheet * """
-        - Transformation Hints: """ * join(excel_analysis.transformation_hints, "; ")
+        - Data Start Row: """ * string(excel_analysis.data_start_row) * """
+        - Header Row: """ * string(excel_analysis.header_row) * """
+        - Preprocessing: """ * join(excel_analysis.recommended_preprocessing, "; ")
     else
         ""
     end

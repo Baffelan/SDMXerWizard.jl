@@ -8,6 +8,7 @@ using HTTP, JSON3, DataFrames, CSV, Statistics, StatsBase, Dates, EzXML, YAML, X
 # Include all module files
 include("SDMXDataSources.jl")
 include("SDMXDataProfiling.jl")
+include("SDMXAnonymization.jl")
 include("SDMXPromptingIntegration.jl")
 include("SDMXMetadataContext.jl")
 include("SDMXEnhancedTransformation.jl")
@@ -50,6 +51,10 @@ export read_data, source_info, validate_source, data_source, read_source_data
 export ColumnProfile, SourceDataProfile
 export profile_source_data, profile_column, detect_column_type_and_patterns
 export print_source_profile, suggest_column_mappings
+
+# === DATA ANONYMIZATION ===
+# AI-free anonymization utilities for privacy-preserving workflows
+export AnonymizationConfig, anonymize_source_data, anonymize_column_values, summarize_anonymized_data
 
 # === LLM INTEGRATION CORE ===
 # Core functions for setting up and interfacing with various LLM providers

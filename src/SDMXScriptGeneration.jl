@@ -127,14 +127,14 @@ script = generator(profile, schema, mappings)  # Instead of generate_transformat
 script = generator(profile, schema, mappings; template_name="pivot_transformation")
 ```
 """
-function (generator::ScriptGenerator)(profile::SourceDataProfile, 
-                                    schema::DataflowSchema, 
+function (generator::ScriptGenerator)(profile::SourceDataProfile,
+                                    schema::DataflowSchema,
                                     mappings::AdvancedMappingResult,
                                     excel_analysis::Union{ExcelStructureAnalysis, Nothing}=nothing;
                                     template_name::String="",
                                     custom_instructions::String="")
-    return generate_transformation_script(generator, profile, schema, mappings, excel_analysis; 
-                                        template_name=template_name, 
+    return generate_transformation_script(generator, profile, schema, mappings, excel_analysis;
+                                        template_name=template_name,
                                         custom_instructions=custom_instructions)
 end
 
@@ -148,25 +148,25 @@ function (generator::ScriptGenerator)(source::DataSource,
     source_info_dict = source_info(source)
     filename = get(source_info_dict, :path, get(source_info_dict, :name, "data_source"))
     profile = profile_source_data(data, filename)
-    
+
     return generator(profile, schema, mappings, excel_analysis; kwargs...)
 end
 
 """
-    create_script_generator(llm_config::LLMConfig; 
-                           include_validation=true, 
+    create_script_generator(llm_config::LLMConfig;
+                           include_validation=true,
                            include_comments=true,
                            tidier_style="pipes",
                            error_handling_level="comprehensive") -> ScriptGenerator
 
 Creates a script generator with specified configuration.
 """
-function create_script_generator(provider::Symbol=:ollama, model::String=""; 
-                                include_validation=true, 
+function create_script_generator(provider::Symbol=:ollama, model::String="";
+                                include_validation=true,
                                 include_comments=true,
                                 tidier_style="pipes",
                                 error_handling_level="comprehensive")
-    
+
     generator = ScriptGenerator(
         provider,
         model,
@@ -177,10 +177,10 @@ function create_script_generator(provider::Symbol=:ollama, model::String="";
         tidier_style,
         error_handling_level
     )
-    
+
     # Load default templates
     load_default_templates!(generator)
-    
+
     return generator
 end
 
@@ -193,15 +193,15 @@ function load_default_templates!(generator::ScriptGenerator)
     # Standard transformation template
     standard_template = create_standard_template()
     generator.templates["standard_transformation"] = standard_template
-    
+
     # Pivot-heavy template
     pivot_template = create_pivot_template()
     generator.templates["pivot_transformation"] = pivot_template
-    
+
     # Multi-sheet Excel template
     excel_template = create_excel_template()
     generator.templates["excel_multi_sheet"] = excel_template
-    
+
     # Simple CSV template
     csv_template = create_csv_template()
     generator.templates["simple_csv"] = csv_template
@@ -222,14 +222,14 @@ function create_standard_template()
 
 using DataFrames, CSV, XLSX, Tidier, Statistics, Dates
 """,
-        
+
         "data_loading" => """
 # === DATA LOADING ===
 println("Loading source data...")
 {{DATA_LOADING_CODE}}
 println("Loaded \$(nrow(source_data)) rows and \$(ncol(source_data)) columns")
 """,
-        
+
         "data_exploration" => """
 # === DATA EXPLORATION ===
 println("Source data structure:")
@@ -237,19 +237,19 @@ println(describe(source_data))
 println("\\nFirst few rows:")
 println(first(source_data, 3))
 """,
-        
+
         "transformations" => """
 # === DATA TRANSFORMATIONS ===
 transformed_data = source_data |>
 {{TRANSFORMATION_PIPELINE}}
 """,
-        
+
         "validation" => """
 # === DATA VALIDATION ===
 println("\\nValidation checks:")
 {{VALIDATION_CHECKS}}
 """,
-        
+
         "output" => """
 # === DATA OUTPUT ===
 println("Writing SDMX-CSV output...")
@@ -257,7 +257,7 @@ println("Writing SDMX-CSV output...")
 println("Transformation completed successfully!")
 """
     )
-    
+
     placeholders = Dict{String, String}(
         "{{TIMESTAMP}}" => "generation_timestamp",
         "{{SOURCE_FILE}}" => "source_file",
@@ -267,7 +267,7 @@ println("Transformation completed successfully!")
         "{{VALIDATION_CHECKS}}" => "validation_logic",
         "{{OUTPUT_CODE}}" => "output_logic"
     )
-    
+
     example_code = """
 # Example usage:
 source_data = CSV.read("data.csv", DataFrame)
@@ -276,7 +276,7 @@ transformed_data = source_data |>
     @mutate(TIME_PERIOD = string(year)) |>
     @select(GEO_PICT, TIME_PERIOD, OBS_VALUE = value)
 """
-    
+
     return ScriptTemplate(
         "standard_transformation",
         "Standard SDMX transformation with validation and error handling",
@@ -302,43 +302,43 @@ function create_pivot_template()
 
 using DataFrames, CSV, XLSX, Tidier, Statistics, Dates
 """,
-        
+
         "data_loading" => """
 # === DATA LOADING ===
 {{DATA_LOADING_CODE}}
 """,
-        
+
         "pivot_analysis" => """
 # === PIVOT ANALYSIS ===
 # Detected time columns: {{TIME_COLUMNS}}
 # Pivot strategy: {{PIVOT_STRATEGY}}
 """,
-        
+
         "transformations" => """
 # === PIVOT TRANSFORMATIONS ===
 transformed_data = source_data |>
 {{PIVOT_TRANSFORMATION}}
 {{POST_PIVOT_TRANSFORMATIONS}}
 """,
-        
+
         "validation" => """
 # === VALIDATION ===
 {{VALIDATION_CHECKS}}
 """,
-        
+
         "output" => """
 # === OUTPUT ===
 {{OUTPUT_CODE}}
 """
     )
-    
+
     placeholders = Dict{String, String}(
         "{{TIME_COLUMNS}}" => "time_columns",
         "{{PIVOT_STRATEGY}}" => "pivot_strategy",
         "{{PIVOT_TRANSFORMATION}}" => "pivot_logic",
         "{{POST_PIVOT_TRANSFORMATIONS}}" => "post_pivot_steps"
     )
-    
+
     return ScriptTemplate(
         "pivot_transformation",
         "Template for data requiring pivot operations",
@@ -363,30 +363,30 @@ function create_excel_template()
 
 using DataFrames, XLSX, Tidier, Statistics
 """,
-        
+
         "excel_analysis" => """
 # === EXCEL ANALYSIS ===
 # Detected sheets: {{SHEET_NAMES}}
 # Primary data sheet: {{PRIMARY_SHEET}}
 # Metadata extraction: {{METADATA_INFO}}
 """,
-        
+
         "data_loading" => """
 # === DATA LOADING ===
 {{EXCEL_LOADING_CODE}}
 """,
-        
+
         "metadata_extraction" => """
 # === METADATA EXTRACTION ===
 {{METADATA_EXTRACTION_CODE}}
 """,
-        
+
         "transformations" => """
 # === TRANSFORMATIONS ===
 {{TRANSFORMATION_PIPELINE}}
 """
     )
-    
+
     return ScriptTemplate(
         "excel_multi_sheet",
         "Template for Excel files with multiple sheets and metadata",
@@ -411,7 +411,7 @@ function create_csv_template()
 
 using DataFrames, CSV, Tidier
 """,
-        
+
         "transformations" => """
 # Load and transform data
 source_data = CSV.read("{{SOURCE_FILE}}", DataFrame)
@@ -423,9 +423,9 @@ transformed_data = source_data |>
 CSV.write("sdmx_output.csv", transformed_data)
 """
     )
-    
+
     return ScriptTemplate(
-        "simple_csv", 
+        "simple_csv",
         "Simple CSV transformation template",
         ["Basic CSV processing", "Quick transformations"],
         ["DataFrames", "CSV", "Tidier"],
@@ -453,34 +453,38 @@ function generate_transformation_script(generator::ScriptGenerator,
                                        excel_analysis::Union{ExcelStructureAnalysis, Nothing} = nothing;
                                        template_name::String = "",
                                        custom_instructions::String = "")
-    
+
     # Select appropriate template
     selected_template = select_template(generator, source_profile, excel_analysis, template_name)
-    
+
     # Build transformation steps
     transformation_steps = build_transformation_steps(mapping_result, source_profile, target_schema)
-    
+
     # Create comprehensive prompt for LLM
     prompt = create_comprehensive_script_prompt(
-        generator, selected_template, source_profile, target_schema, 
+        generator, selected_template, source_profile, target_schema,
         mapping_result, transformation_steps, excel_analysis, custom_instructions
     )
-    
+
     # Generate script using LLM
-    generated_code = query_llm(generator.llm_config, prompt.user_prompt; 
-                              system_prompt=prompt.system_prompt)
-    
+    generated_code = sdmx_aigenerate(
+        prompt.user_prompt;
+        provider=generator.provider,
+        model=generator.model,
+        system_prompt=prompt.system_prompt
+    )
+
     # Post-process and validate generated code
     processed_code = post_process_generated_code(generated_code, selected_template, generator)
-    
+
     # Create validation notes and user guidance
     validation_notes, user_guidance = create_script_guidance(
         mapping_result, transformation_steps, source_profile, target_schema
     )
-    
+
     # Calculate estimated complexity
     complexity = calculate_script_complexity(transformation_steps, mapping_result)
-    
+
     return GeneratedScript(
         "sdmx_transformation_$(Dates.format(now(), "yyyymmdd_HHMMSS"))",
         source_profile.file_path,
@@ -496,23 +500,23 @@ function generate_transformation_script(generator::ScriptGenerator,
 end
 
 """
-    select_template(generator::ScriptGenerator, 
+    select_template(generator::ScriptGenerator,
                    source_profile::SourceDataProfile,
                    excel_analysis::Union{ExcelStructureAnalysis, Nothing},
                    template_name::String) -> ScriptTemplate
 
 Selects the most appropriate template based on data characteristics.
 """
-function select_template(generator::ScriptGenerator, 
+function select_template(generator::ScriptGenerator,
                         source_profile::SourceDataProfile,
                         excel_analysis::Union{ExcelStructureAnalysis, Nothing},
                         template_name::String)
-    
+
     # Use specified template if provided
     if !isempty(template_name) && haskey(generator.templates, template_name)
         return generator.templates[template_name]
     end
-    
+
     # Auto-select based on data characteristics
     if excel_analysis !== nothing
         if length(excel_analysis.sheets) > 1
@@ -521,17 +525,17 @@ function select_template(generator::ScriptGenerator,
             return generator.templates["pivot_transformation"]
         end
     end
-    
+
     # Check if pivoting is needed based on source profile
     if length(source_profile.suggested_time_columns) > 0 && source_profile.column_count > 5
         return generator.templates["pivot_transformation"]
     end
-    
+
     # Default to simple CSV for basic cases
     if source_profile.file_type == "csv" && source_profile.column_count <= 8
         return generator.templates["simple_csv"]
     end
-    
+
     # Default to standard transformation
     return generator.templates[generator.default_template]
 end
@@ -546,9 +550,9 @@ Builds detailed transformation steps from mapping results.
 function build_transformation_steps(mapping_result::AdvancedMappingResult,
                                    source_profile::SourceDataProfile,
                                    target_schema::DataflowSchema)
-    
+
     steps = Vector{TransformationStep}()
-    
+
     # Step 1: Data loading
     push!(steps, TransformationStep(
         "data_loading",
@@ -561,7 +565,7 @@ function build_transformation_steps(mapping_result::AdvancedMappingResult,
         String[],
         ["Load the source data file with appropriate function"]
     ))
-    
+
     # Step 2: Data exploration (optional)
     if mapping_result.quality_score < 0.8
         push!(steps, TransformationStep(
@@ -576,11 +580,11 @@ function build_transformation_steps(mapping_result::AdvancedMappingResult,
             ["Review data structure", "Check for data quality issues", "Understand value distributions"]
         ))
     end
-    
+
     # Step 3: Column mappings and transformations
     for mapping in mapping_result.mappings
         step_name = "map_$(mapping.source_column)_to_$(mapping.target_column)"
-        
+
         if mapping.suggested_transformation !== nothing
             # Complex transformation needed
             push!(steps, TransformationStep(
@@ -609,12 +613,12 @@ function build_transformation_steps(mapping_result::AdvancedMappingResult,
             ))
         end
     end
-    
+
     # Step 4: Handle missing required columns
     required_cols = get_required_columns(target_schema)
     mapped_targets = Set([m.target_column for m in mapping_result.mappings])
     missing_required = setdiff(Set(required_cols), mapped_targets)
-    
+
     if !isempty(missing_required)
         push!(steps, TransformationStep(
             "handle_missing_columns",
@@ -628,7 +632,7 @@ function build_transformation_steps(mapping_result::AdvancedMappingResult,
             ["Manual intervention needed for unmapped required columns"]
         ))
     end
-    
+
     # Step 5: Data validation
     if any(m.confidence_level <= MEDIUM for m in mapping_result.mappings)
         push!(steps, TransformationStep(
@@ -643,7 +647,7 @@ function build_transformation_steps(mapping_result::AdvancedMappingResult,
             ["Review low-confidence mappings", "Check for data quality issues"]
         ))
     end
-    
+
     # Step 6: Output
     push!(steps, TransformationStep(
         "data_output",
@@ -656,12 +660,12 @@ function build_transformation_steps(mapping_result::AdvancedMappingResult,
         ["Verify output format compliance"],
         ["Save result as SDMX-CSV format"]
     ))
-    
+
     return steps
 end
 
 """
-    create_comprehensive_script_prompt(generator::ScriptGenerator, 
+    create_comprehensive_script_prompt(generator::ScriptGenerator,
                                       template::ScriptTemplate,
                                       source_profile::SourceDataProfile,
                                       target_schema::DataflowSchema,
@@ -672,7 +676,7 @@ end
 
 Creates comprehensive prompts for LLM script generation.
 """
-function create_comprehensive_script_prompt(generator::ScriptGenerator, 
+function create_comprehensive_script_prompt(generator::ScriptGenerator,
                                            template::ScriptTemplate,
                                            source_profile::SourceDataProfile,
                                            target_schema::DataflowSchema,
@@ -680,8 +684,8 @@ function create_comprehensive_script_prompt(generator::ScriptGenerator,
                                            transformation_steps::Vector{TransformationStep},
                                            excel_analysis::Union{ExcelStructureAnalysis, Nothing},
                                            custom_instructions::String)
-    
-    system_prompt = """You are an expert Julia developer specializing in data transformation using Tidier.jl and SDMX standards. 
+
+    system_prompt = """You are an expert Julia developer specializing in data transformation using Tidier.jl and SDMX standards.
 
 Your task is to generate a working Julia script that transforms source data into SDMX-compliant format. The script should:
 
@@ -713,7 +717,7 @@ Data Quality: $(round(source_profile.data_quality_score * 100, digits=1))%
 
 ### Source Columns:
 """
-    
+
     for col in source_profile.columns
         user_prompt *= "- **$(col.name)**: $(col.type)"
         if col.is_temporal
@@ -725,30 +729,34 @@ Data Quality: $(round(source_profile.data_quality_score * 100, digits=1))%
         end
         user_prompt *= "\n"
     end
-    
+
     # Add Excel analysis if available
     if excel_analysis !== nothing
         user_prompt *= "\n### Excel Analysis:\n"
-        user_prompt *= "- Sheets: $(length(excel_analysis.sheets))\n"
         user_prompt *= "- Primary sheet: $(excel_analysis.recommended_sheet)\n"
-        user_prompt *= "- Pivoting needed: $(excel_analysis.pivoting_detected)\n"
-        user_prompt *= "- Complexity: $(round(excel_analysis.complexity_score, digits=2))\n"
-        
-        if !isempty(excel_analysis.transformation_hints)
-            user_prompt *= "- Hints: $(join(excel_analysis.transformation_hints, "; "))\n"
+        user_prompt *= "- Data start row: $(excel_analysis.data_start_row)\n"
+        user_prompt *= "- Header row: $(excel_analysis.header_row)\n"
+        user_prompt *= "- Pivoting detected: $(excel_analysis.pivot_structure_detected)\n"
+
+        if !isempty(excel_analysis.data_quality_issues)
+            user_prompt *= "- Data quality issues: $(join(excel_analysis.data_quality_issues, "; "))\n"
+        end
+
+        if !isempty(excel_analysis.recommended_preprocessing)
+            user_prompt *= "- Preprocessing: $(join(excel_analysis.recommended_preprocessing, "; "))\n"
         end
     end
-    
+
     # Add target schema information
     user_prompt *= "\n## Target SDMX Schema\n"
     user_prompt *= "Dataflow: $(target_schema.dataflow_info.id) - $(target_schema.dataflow_info.name)\n"
     user_prompt *= "Agency: $(target_schema.dataflow_info.agency)\n\n"
-    
+
     user_prompt *= "### Required Columns ($(length(get_required_columns(target_schema)))):\n"
     for col in get_required_columns(target_schema)
         user_prompt *= "- $col\n"
     end
-    
+
     optional_cols = get_optional_columns(target_schema)
     if !isempty(optional_cols)
         user_prompt *= "\n### Optional Columns ($(length(optional_cols))):\n"
@@ -756,13 +764,13 @@ Data Quality: $(round(source_profile.data_quality_score * 100, digits=1))%
             user_prompt *= "- $col\n"
         end
     end
-    
+
     # Add mapping results
     user_prompt *= "\n## Mapping Analysis\n"
     user_prompt *= "Quality Score: $(round(mapping_result.quality_score, digits=3))\n"
     user_prompt *= "Coverage: $(round(mapping_result.coverage_analysis["required_coverage"], digits=3))\n"
     user_prompt *= "Complexity: $(round(mapping_result.transformation_complexity, digits=3))\n\n"
-    
+
     user_prompt *= "### Confirmed Mappings:\n"
     for mapping in mapping_result.mappings[1:min(8, length(mapping_result.mappings))]
         user_prompt *= "- **$(mapping.source_column)** → **$(mapping.target_column)** "
@@ -771,15 +779,15 @@ Data Quality: $(round(source_profile.data_quality_score * 100, digits=1))%
             user_prompt *= "  Transformation: $(mapping.suggested_transformation)\n"
         end
     end
-    
+
     if !isempty(mapping_result.unmapped_source_columns)
         user_prompt *= "\n### Unmapped Source Columns:\n$(join(mapping_result.unmapped_source_columns, ", "))\n"
     end
-    
+
     if !isempty(mapping_result.unmapped_target_columns)
         user_prompt *= "\n### Missing Target Columns:\n$(join(mapping_result.unmapped_target_columns, ", "))\n"
     end
-    
+
     # Add transformation steps guidance
     user_prompt *= "\n## Transformation Steps Required:\n"
     for (i, step) in enumerate(transformation_steps)
@@ -788,7 +796,7 @@ Data Quality: $(round(source_profile.data_quality_score * 100, digits=1))%
             user_prompt *= "   Notes: $(join(step.comments, "; "))\n"
         end
     end
-    
+
     # Add recommendations
     if !isempty(mapping_result.recommendations)
         user_prompt *= "\n## Recommendations:\n"
@@ -796,21 +804,21 @@ Data Quality: $(round(source_profile.data_quality_score * 100, digits=1))%
             user_prompt *= "- $rec\n"
         end
     end
-    
+
     # Add custom instructions
     if !isempty(custom_instructions)
         user_prompt *= "\n## Custom Instructions:\n$custom_instructions\n"
     end
-    
+
     # Add template structure
     user_prompt *= "\n## Template Structure:\n"
     user_prompt *= "Use this template as a foundation, adapting as needed:\n\n"
-    
+
     # Show key template sections
     for (section_name, section_code) in template.template_sections
         user_prompt *= "### $section_name:\n```julia\n$section_code\n```\n\n"
     end
-    
+
     user_prompt *= """
 ## Output Requirements:
 1. Generate complete, executable Julia code
@@ -823,7 +831,7 @@ Data Quality: $(round(source_profile.data_quality_score * 100, digits=1))%
 8. Save output as SDMX-compliant CSV
 
 Generate the complete script now:"""
-    
+
     return (system_prompt=system_prompt, user_prompt=user_prompt)
 end
 
@@ -852,7 +860,7 @@ function generate_transformation_logic(mapping::MappingCandidate)
     if mapping.suggested_transformation !== nothing
         return mapping.suggested_transformation
     end
-    
+
     # Generate basic transformation based on mapping type
     if mapping.match_type == "exact"
         return "$(mapping.target_column) = $(mapping.source_column)"
@@ -864,12 +872,12 @@ function generate_transformation_logic(mapping::MappingCandidate)
 end
 
 """
-    create_validation_logic(mapping_result::AdvancedMappingResult, 
+    create_validation_logic(mapping_result::AdvancedMappingResult,
                            target_schema::DataflowSchema) -> String
 
 Creates validation logic for the transformation.
 """
-function create_validation_logic(mapping_result::AdvancedMappingResult, 
+function create_validation_logic(mapping_result::AdvancedMappingResult,
                                 target_schema::DataflowSchema)
     validation_code = """
 # Check required columns are present
@@ -888,35 +896,35 @@ for col in names(transformed_data)
 end
 
 println("Validation completed.")"""
-    
+
     return validation_code
 end
 
 """
-    post_process_generated_code(code::String, template::ScriptTemplate, 
+    post_process_generated_code(code::String, template::ScriptTemplate,
                                generator::ScriptGenerator) -> String
 
 Post-processes generated code to ensure quality and consistency.
 """
-function post_process_generated_code(code::String, template::ScriptTemplate, 
+function post_process_generated_code(code::String, template::ScriptTemplate,
                                    generator::ScriptGenerator)
     processed_code = code
-    
+
     # Remove any markdown code blocks
     processed_code = replace(processed_code, r"```julia\n?" => "")
     processed_code = replace(processed_code, r"```\n?" => "")
-    
+
     # Ensure proper imports are included
     if !occursin("using", processed_code)
         processed_code = join(template.required_packages, ", ") * "\n\n" * processed_code
     end
-    
+
     # Add generation comment if not present
     if !occursin("Generated by SDMXer.jl", processed_code)
         header_comment = "# Generated by SDMXer.jl on $(now())\n# Template: $(template.template_name)\n\n"
         processed_code = header_comment * processed_code
     end
-    
+
     return processed_code
 end
 
@@ -932,37 +940,37 @@ function create_script_guidance(mapping_result::AdvancedMappingResult,
                                transformation_steps::Vector{TransformationStep},
                                source_profile::SourceDataProfile,
                                target_schema::DataflowSchema)
-    
+
     validation_notes = String[]
     user_guidance = String[]
-    
+
     # Validation notes
     if mapping_result.quality_score < 0.7
         push!(validation_notes, "Low mapping quality score ($(round(mapping_result.quality_score, digits=2))) - review transformations carefully")
     end
-    
+
     if mapping_result.coverage_analysis["required_coverage"] < 0.8
         push!(validation_notes, "Incomplete coverage of required fields ($(round(mapping_result.coverage_analysis["required_coverage"]*100, digits=1))%)")
     end
-    
+
     low_confidence_mappings = sum([m.confidence_level <= MEDIUM for m in mapping_result.mappings])
     if low_confidence_mappings > 0
         push!(validation_notes, "$low_confidence_mappings mappings have medium or low confidence")
     end
-    
+
     # User guidance
     push!(user_guidance, "Review and test the generated script before processing production data")
     push!(user_guidance, "Pay special attention to TODO comments - manual intervention may be needed")
     push!(user_guidance, "Validate the output against SDMX requirements for your specific dataflow")
-    
+
     if source_profile.data_quality_score < 0.9
         push!(user_guidance, "Source data quality is $(round(source_profile.data_quality_score*100, digits=1))% - consider data cleaning")
     end
-    
+
     if !isempty(mapping_result.unmapped_target_columns)
         push!(user_guidance, "$(length(mapping_result.unmapped_target_columns)) target columns remain unmapped - add logic as needed")
     end
-    
+
     return validation_notes, user_guidance
 end
 
@@ -974,12 +982,12 @@ Calculates estimated complexity of the generated script.
 """
 function calculate_script_complexity(transformation_steps::Vector{TransformationStep},
                                     mapping_result::AdvancedMappingResult)
-    
+
     complexity = 0.0
-    
+
     # Base complexity from number of transformation steps
     complexity += length(transformation_steps) * 0.1
-    
+
     # Complexity from transformation types
     for step in transformation_steps
         if step.operation_type in ["pivot", "validate"]
@@ -988,14 +996,14 @@ function calculate_script_complexity(transformation_steps::Vector{Transformation
             complexity += 0.1
         end
     end
-    
+
     # Complexity from mapping quality
     complexity += (1.0 - mapping_result.quality_score) * 0.3
-    
+
     # Complexity from transformation needs
     complex_transformations = sum([m.suggested_transformation !== nothing for m in mapping_result.mappings])
     complexity += complex_transformations * 0.05
-    
+
     return min(1.0, complexity)
 end
 
@@ -1011,9 +1019,9 @@ function validate_generated_script(script::GeneratedScript)
         "recommendations" => String[],
         "overall_quality" => "unknown"
     )
-    
+
     code = script.generated_code
-    
+
     # Check for required imports
     required_packages = ["DataFrames", "Tidier"]
     for package in required_packages
@@ -1021,33 +1029,33 @@ function validate_generated_script(script::GeneratedScript)
             push!(validation["missing_elements"], "Missing import for $package")
         end
     end
-    
+
     # Check for Tidier.jl usage
     tidier_functions = ["@mutate", "@select", "@filter", "@pivot_longer", "@pivot_wider"]
     tidier_used = any(func -> occursin(func, code), tidier_functions)
     if !tidier_used
         push!(validation["missing_elements"], "No Tidier.jl functions detected")
     end
-    
+
     # Check for data loading
     if !occursin("CSV.read", code) && !occursin("XLSX.read", code)
         push!(validation["missing_elements"], "No data loading code detected")
     end
-    
+
     # Check for output
     if !occursin("CSV.write", code) && !occursin("write", code)
         push!(validation["missing_elements"], "No data output code detected")
     end
-    
+
     # Recommendations
     if script.estimated_complexity > 0.7
         push!(validation["recommendations"], "High complexity script - consider breaking into smaller steps")
     end
-    
+
     if length(script.validation_notes) > 3
         push!(validation["recommendations"], "Multiple validation concerns - thorough testing recommended")
     end
-    
+
     # Overall quality assessment
     issues = length(validation["syntax_issues"]) + length(validation["missing_elements"])
     if issues == 0
@@ -1057,7 +1065,7 @@ function validate_generated_script(script::GeneratedScript)
     else
         validation["overall_quality"] = "needs_work"
     end
-    
+
     return validation
 end
 
@@ -1079,33 +1087,33 @@ Target: $(script.target_schema)
 
 === TRANSFORMATION STEPS ($(length(script.transformation_steps))) ===
 """
-    
+
     for (i, step) in enumerate(script.transformation_steps)
         preview *= "$(i). $(step.step_name): $(step.description)\n"
     end
-    
+
     if !isempty(script.validation_notes)
         preview *= "\n=== VALIDATION NOTES ===\n"
         for note in script.validation_notes
             preview *= "⚠ $note\n"
         end
     end
-    
+
     if !isempty(script.user_guidance)
         preview *= "\n=== USER GUIDANCE ===\n"
         for guidance in script.user_guidance
             preview *= "💡 $guidance\n"
         end
     end
-    
+
     preview *= "\n=== CODE PREVIEW (first $max_lines lines) ===\n"
     code_lines = split(script.generated_code, '\n')
     preview_lines = code_lines[1:min(max_lines, length(code_lines))]
     preview *= join(preview_lines, '\n')
-    
+
     if length(code_lines) > max_lines
         preview *= "\n... ($(length(code_lines) - max_lines) more lines)"
     end
-    
+
     return preview
 end
