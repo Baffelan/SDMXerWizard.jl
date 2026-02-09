@@ -468,7 +468,10 @@ function fuzzy_match_score(str1::String, str2::String)
             return 0.0
         end
 
-        len1, len2 = length(str1), length(str2)
+        # Use character vectors to handle multi-byte Unicode correctly
+        chars1 = collect(str1)
+        chars2 = collect(str2)
+        len1, len2 = length(chars1), length(chars2)
         match_window = max(len1, len2) ÷ 2 - 1
         match_window = max(0, match_window)
 
@@ -484,7 +487,7 @@ function fuzzy_match_score(str1::String, str2::String)
             stop = min(i + match_window, len2)
 
             for j in start:stop
-                if str2_matches[j] || str1[i] != str2[j]
+                if str2_matches[j] || chars1[i] != chars2[j]
                     continue
                 end
                 str1_matches[i] = str2_matches[j] = true
@@ -506,13 +509,14 @@ function fuzzy_match_score(str1::String, str2::String)
             while !str2_matches[k]
                 k += 1
             end
-            if str1[i] != str2[k]
+            if chars1[i] != chars2[k]
                 transpositions += 1
             end
             k += 1
         end
 
-        jaro = (matches/len1 + matches/len2 + (matches - transpositions/2)/matches) / 3.0
+        jaro = (matches / len1 + matches / len2 +
+                (matches - transpositions / 2) / matches) / 3.0
         return jaro
     end
 
