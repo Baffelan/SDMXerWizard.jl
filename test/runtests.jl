@@ -252,6 +252,10 @@ using Dates
         @test occursin("PREVIEW", uppercase(preview_text))
     end
 
+    @testset "Cross-Dataflow" begin
+        include("test_cross_dataflow.jl")
+    end
+
     @testset "Script Guidance" begin
         # Setup test data
         test_data = DataFrame(

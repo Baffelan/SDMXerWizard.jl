@@ -17,6 +17,9 @@ include("SDMXScriptGeneration.jl")
 include("SDMXWorkflow.jl")
 include("SDMXLLMPipelineOps.jl")
 include("SDMXPromptGeneration.jl")
+include("SDMXJoinPrompts.jl")
+include("SDMXCrossDataflowLLM.jl")
+include("SDMXJoinWorkflow.jl")
 
 # === CORE DATA STRUCTURES ===
 
@@ -93,5 +96,18 @@ export build_sdmx_context_section, build_source_analysis_section, build_code_map
 # === WORKFLOW ORCHESTRATION ===
 # High-level workflow management for end-to-end SDMX data transformation pipelines
 export create_workflow, execute_workflow, generate_workflow_report, ai_sdmx_workflow
+
+# === CROSS-DATAFLOW JOIN PROMPTS ===
+# Prompt construction for LLM-assisted cross-dataflow analysis (no LLM calls)
+export create_join_analysis_prompt, create_indicator_classification_prompt, create_unit_inference_prompt
+
+# === CROSS-DATAFLOW LLM INFERENCE ===
+# LLM-powered cross-dataflow analysis and script generation
+export infer_unit_conversion, suggest_analysis_dataflows, generate_join_script
+export infer_indicator_semantics, suggest_comparable_indicators
+
+# === CROSS-DATAFLOW JOIN WORKFLOW ===
+# End-to-end workflow for multi-dataflow joins
+export JoinWorkflowConfig, execute_join_workflow
 
 end # module SDMXerWizard
