@@ -1,4 +1,2 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-SDMXer = "88354817-cd1f-48b9-9770-05d0dc5d6299"
-SDMXerWizard = "5bf9ff8a-8115-426c-8d6d-96131ecc5d37"
