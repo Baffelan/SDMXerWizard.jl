@@ -64,6 +64,9 @@ mappings = infer_mappings(my_data, schema;
 profile = profile_source_data(my_data)
 mappings = infer_mappings(profile, schema; method=:fuzzy)
 ```
+
+# See also
+[`profile_source_data`](@ref), [`generate_transformation_script`](@ref), [`SourceDataProfile`](@ref), [`AdvancedMappingResult`](@ref)
 """
 function infer_mappings(source_data, target_schema::DataflowSchema;
                        method::Symbol=:heuristic,
@@ -307,6 +310,10 @@ end
     AdvancedMappingResult
 
 Comprehensive result of advanced mapping inference.
+
+# See also
+- [`infer_mappings`](@ref): produces this result (with `method=:advanced`)
+- [`generate_transformation_script`](@ref): consumes this result to generate code
 """
 struct AdvancedMappingResult
     mappings::Vector{MappingCandidate}

@@ -71,6 +71,17 @@ using DataFrames
         @test config.use_llm == false
         @test isnothing(config.time_range)
         @test isnothing(config.geo_filter)
+        @test isempty(config.dataflow_filters)
+    end
+
+    @testset "JoinWorkflowConfig with dataflow_filters" begin
+        filters = Dict("DF_BP50" => Dict{String, Any}("INDICATOR" => "BP50_01"))
+        config = JoinWorkflowConfig(
+            ["DF_BP50"];
+            dataflow_filters = filters
+        )
+        @test haskey(config.dataflow_filters, "DF_BP50")
+        @test config.dataflow_filters["DF_BP50"]["INDICATOR"] == "BP50_01"
     end
 
     # LLM-dependent tests — guarded by API key availability

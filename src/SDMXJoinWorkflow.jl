@@ -26,6 +26,11 @@ Configuration for an end-to-end cross-dataflow join workflow.
 - `llm_provider::Symbol`: LLM provider for assisted inference
 - `llm_model::String`: LLM model name
 - `use_llm::Bool`: Whether to use LLM for ambiguous cases
+- `dataflow_filters::Dict{String, Dict{String, Any}}`: Per-dataflow dimension filters (dataflow_id => dimension filters)
+
+# See also
+- [`execute_join_workflow`](@ref): runs this configuration end-to-end
+- [`suggest_analysis_dataflows`](@ref): LLM-assisted selection of dataflow IDs
 """
 struct JoinWorkflowConfig
     dataflow_ids::Vector{String}
@@ -38,6 +43,7 @@ struct JoinWorkflowConfig
     llm_provider::Symbol
     llm_model::String
     use_llm::Bool
+    dataflow_filters::Dict{String, Dict{String, Any}}
 end
 
 function JoinWorkflowConfig(
@@ -50,12 +56,13 @@ function JoinWorkflowConfig(
         exchange_rates::Union{ExchangeRateTable, Nothing} = nothing,
         llm_provider::Symbol = :ollama,
         llm_model::String = "",
-        use_llm::Bool = false
+        use_llm::Bool = false,
+        dataflow_filters::Dict{String, Dict{String, Any}} = Dict{String, Dict{String, Any}}()
 )
     return JoinWorkflowConfig(
         dataflow_ids, base_url, agency, research_question,
         time_range, geo_filter, exchange_rates,
-        llm_provider, llm_model, use_llm
+        llm_provider, llm_model, use_llm, dataflow_filters
     )
 end
 
@@ -84,6 +91,9 @@ Returns a Dict with keys:
 - `"script"`: Generated join script (if use_llm=true)
 - `"warnings"`: Vector of warning strings
 - `"status"`: "success" or "error"
+
+# See also
+[`JoinWorkflowConfig`](@ref), `JoinResult` (SDMXer), [`generate_join_script`](@ref)
 """
 function execute_join_workflow(config::JoinWorkflowConfig)
     result = Dict{String, Any}(
@@ -127,15 +137,16 @@ function execute_join_workflow(config::JoinWorkflowConfig)
     data_frames = Dict{String, DataFrame}()
     for df_id in config.dataflow_ids
         try
+            # Build filters: start from per-dataflow filters, fold in legacy geo_filter
+            df_filters = Dict{String, Any}(get(config.dataflow_filters, df_id, Dict{String, Any}()))
+            if !isnothing(config.geo_filter) && !haskey(df_filters, "GEO_PICT")
+                df_filters["GEO_PICT"] = config.geo_filter
+            end
+
             df = query_sdmx_data(config.base_url, config.agency, df_id;
+                filters = df_filters,
                 start_period = isnothing(config.time_range) ? nothing : config.time_range[1],
                 end_period = isnothing(config.time_range) ? nothing : config.time_range[2])
-
-            # Apply geo filter if provided
-            if !isnothing(config.geo_filter) && hasproperty(df, :GEO_PICT)
-                geo_set = Set(config.geo_filter)
-                df = filter(row -> string(row.GEO_PICT) in geo_set, df)
-            end
 
             data_frames[df_id] = df
         catch e

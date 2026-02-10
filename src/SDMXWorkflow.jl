@@ -88,6 +88,10 @@ end
     WorkflowConfig
 
 Configuration settings for the SDMX workflow execution.
+
+# See also
+- [`create_workflow`](@ref): creates an `SDMXWorkflow` from this config
+- [`execute_workflow`](@ref): runs the workflow to produce a `WorkflowResult`
 """
 struct WorkflowConfig
     # Data source settings
@@ -129,6 +133,10 @@ end
     WorkflowResult
 
 Complete results from workflow execution including all outputs and metadata.
+
+# See also
+- [`execute_workflow`](@ref): produces this result
+- [`generate_workflow_report`](@ref): formats the result as a report
 """
 struct WorkflowResult
     workflow_id::String
@@ -185,6 +193,9 @@ end
     create_workflow(config::WorkflowConfig) -> SDMXWorkflow
 
 Creates a new SDMX workflow with the specified configuration.
+
+# See also
+[`WorkflowConfig`](@ref), [`execute_workflow`](@ref)
 """
 function create_workflow(config::WorkflowConfig)
     workflow_id = "sdmx_workflow_$(Dates.format(now(), "yyyymmdd_HHMMSS"))"
@@ -297,6 +308,9 @@ end
     execute_workflow(workflow::SDMXWorkflow) -> WorkflowResult
 
 Executes the complete SDMX transformation workflow.
+
+# See also
+[`WorkflowResult`](@ref), [`create_workflow`](@ref), [`generate_workflow_report`](@ref)
 """
 function execute_workflow(workflow::SDMXWorkflow)
     workflow.execution_start_time = now()

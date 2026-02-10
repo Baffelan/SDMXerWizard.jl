@@ -1,3 +1,59 @@
+"""
+    SDMXerWizard
+
+LLM-powered extension for `SDMXer` (SDMX.jl). Adds data profiling, mapping inference,
+script generation, and end-to-end workflow orchestration.
+
+# Workflow paths
+
+**Data profiling**
+    profile_source_data  ─→  SourceDataProfile  (with ColumnProfile per column)
+
+**Mapping inference** (unified API)
+    infer_mappings(source, schema; method=:heuristic)   # no LLM
+    infer_mappings(source, schema; method=:fuzzy)        # fuzzy string matching
+    infer_mappings(source, schema; method=:llm)          # LLM-enhanced
+    infer_mappings(source, schema; method=:advanced)     # all engines combined
+    ─→ AdvancedMappingResult / SDMXMappingResult
+
+**Script generation**
+    create_script_generator  ─→  ScriptGenerator
+    generate_transformation_script  ─→  GeneratedScript
+
+**Single-dataflow workflow**
+    WorkflowConfig  ─→  create_workflow  ─→  SDMXWorkflow
+    execute_workflow  ─→  WorkflowResult
+    generate_workflow_report  ─→  formatted report string
+
+**Cross-dataflow join workflow**
+    JoinWorkflowConfig  ─→  execute_join_workflow  ─→  Dict with JoinResult
+
+**LLM setup**
+    setup_sdmx_llm(:provider; model=...)  # configure PromptingTools backend
+    sdmx_aigenerate  /  sdmx_aiextract    # low-level LLM calls
+
+**Cross-dataflow LLM helpers**
+    suggest_analysis_dataflows  ─→  recommended dataflow IDs for a research question
+    infer_unit_conversion       ─→  LLM-suggested unit conversion strategy
+    generate_join_script        ─→  GeneratedScript for joining dataflows
+    infer_indicator_semantics  /  suggest_comparable_indicators
+
+**Prompt construction** (no LLM calls — build prompts for external use)
+    create_join_analysis_prompt  /  create_indicator_classification_prompt
+    create_unit_inference_prompt
+
+# Core types
+
+- `JoinWorkflowConfig`: configuration for multi-dataflow join workflow
+- `WorkflowConfig`: configuration for single-dataflow transformation workflow
+- `WorkflowResult`: outcome of `execute_workflow`
+- `SourceDataProfile`: column-level profile of a source dataset
+- `AdvancedMappingResult`: mapping results from `infer_mappings`
+- `GeneratedScript`: transformation script produced by `generate_transformation_script`
+- `ScriptGenerator`: configured script generation engine
+
+See also: `SDMXer` (SDMX.jl) for core SDMX parsing, validation, and deterministic joins.
+"""
 module SDMXerWizard
 
 # Load all dependencies at package level

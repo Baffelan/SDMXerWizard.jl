@@ -269,6 +269,9 @@ Creates a comprehensive profile of source data including column analysis and map
 This function analyzes an entire DataFrame to understand its structure, data quality,
 and potential mappings to SDMX schema elements. It profiles each column individually
 and provides suggestions for dimension, measure, and time columns.
+
+# See also
+[`SourceDataProfile`](@ref), [`infer_mappings`](@ref)
 """
 function profile_source_data(df::DataFrame, file_path::String = "")
     row_count = nrow(df)

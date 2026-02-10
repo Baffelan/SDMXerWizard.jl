@@ -231,6 +231,9 @@ GOOGLE_API_KEY: "your-google-api-key"
 OPENAI_API_KEY: "your-openai-api-key"
 ANTHROPIC_API_KEY: "your-anthropic-api-key"
 ```
+
+# See also
+[`sdmx_aigenerate`](@ref), [`sdmx_aiextract`](@ref), [`infer_mappings`](@ref)
 """
 function setup_sdmx_llm(provider::Union{Symbol, LLMProvider}=:openai; model::String="", env_file::Union{String, Nothing}=nothing, kwargs...)
     # Load API keys from .env file if specified

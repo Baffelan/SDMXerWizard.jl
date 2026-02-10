@@ -16,6 +16,9 @@ No LLM calls — just string building. Used by SDMXCrossDataflowLLM.jl.
 
 Build a prompt that describes multiple dataflow schemas and their comparisons,
 asking the LLM to recommend a join strategy for a given research question.
+
+# See also
+[`sdmx_aigenerate`](@ref), `compare_schemas` (SDMXer)
 """
 function create_join_analysis_prompt(
         schemas::Vector{DataflowSchema},
@@ -82,6 +85,9 @@ end
 
 Build a prompt asking the LLM to classify SDMX indicators by semantic type
 (volume, value, price, share, rate, index).
+
+# See also
+[`sdmx_aigenerate`](@ref), [`infer_indicator_semantics`](@ref)
 """
 function create_indicator_classification_prompt(
         indicators_df::DataFrame, dataflow_id::String)
@@ -122,6 +128,9 @@ end
 
 Build a prompt asking the LLM to interpret ambiguous SDMX unit metadata.
 Context should include value ranges, dataflow names, and any other hints.
+
+# See also
+[`sdmx_aigenerate`](@ref), [`infer_unit_conversion`](@ref)
 """
 function create_unit_inference_prompt(
         unit_a::String, unit_b::String, context::Dict{String, Any})

@@ -26,6 +26,9 @@ use similar codes but value ranges suggest different actual units (e.g., both ta
 "FJD" but one is FJD/kg and other FJD/tonne).
 
 Returns a Dict with keys: "comparable", "conversion_factor", "confidence", "reasoning".
+
+# See also
+`detect_unit_conflicts` (SDMXer), [`create_unit_inference_prompt`](@ref)
 """
 function infer_unit_conversion(
         unit_a::String, unit_b::String;
@@ -76,6 +79,9 @@ end
 Ask an LLM to suggest relevant SDMX dataflows for a research question.
 
 Returns a vector of Dicts with keys: "dataflow_id", "relevance", "reasoning".
+
+# See also
+[`JoinWorkflowConfig`](@ref), [`execute_join_workflow`](@ref)
 """
 function suggest_analysis_dataflows(
         research_question::String;
@@ -120,6 +126,9 @@ end
                         model::String="") -> GeneratedScript
 
 Generate a Julia script that fetches, normalizes, and joins multiple SDMX dataflows.
+
+# See also
+[`execute_join_workflow`](@ref), [`JoinWorkflowConfig`](@ref), [`GeneratedScript`](@ref)
 """
 function generate_join_script(
         dataflow_ids::Vector{String},

@@ -81,6 +81,10 @@ end
     GeneratedScript
 
 Complete generated transformation script with metadata.
+
+# See also
+- [`generate_transformation_script`](@ref): produces this result
+- [`generate_join_script`](@ref): produces this result for cross-dataflow joins
 """
 struct GeneratedScript
     script_name::String
@@ -160,6 +164,9 @@ end
                            error_handling_level="comprehensive") -> ScriptGenerator
 
 Creates a script generator with specified configuration.
+
+# See also
+[`generate_transformation_script`](@ref), [`ScriptGenerator`](@ref)
 """
 function create_script_generator(provider::Symbol=:ollama, model::String="";
                                 include_validation=true,
@@ -445,6 +452,9 @@ end
                                  custom_instructions::String = "") -> GeneratedScript
 
 Generates a complete transformation script using LLM and templates.
+
+# See also
+[`create_script_generator`](@ref), [`GeneratedScript`](@ref), [`infer_mappings`](@ref)
 """
 function generate_transformation_script(generator::ScriptGenerator,
                                        source_profile::SourceDataProfile,
