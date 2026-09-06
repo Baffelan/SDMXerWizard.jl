@@ -1372,11 +1372,16 @@ function suggest_value_transformations(mapping::MappingCandidate,
 end
 
 """
-    validate_mapping_quality(result::AdvancedMappingResult) -> Dict{String, Any}
+    validate_mapping_quality(result::AdvancedMappingResult[, target_schema::DataflowSchema]) -> Dict{String, Any}
 
 Validates the quality of the mapping result and provides quality metrics.
+
+When `target_schema` is given, the unmapped target columns are checked against
+the schema's required columns and a warning is added for any required column
+that remains unmapped. Without a schema that check is skipped.
 """
-function validate_mapping_quality(result::AdvancedMappingResult)
+function validate_mapping_quality(result::AdvancedMappingResult,
+                                  target_schema::Union{DataflowSchema, Nothing}=nothing)
     validation = Dict{String, Any}(
         "overall_quality" => result.quality_score,
         "coverage_adequate" => result.coverage_analysis["required_coverage"] >= 0.8,
@@ -1405,11 +1410,14 @@ function validate_mapping_quality(result::AdvancedMappingResult)
         push!(validation["warnings"], "High transformation complexity detected")
     end
 
-    if !isempty(result.unmapped_target_columns)
-        required_cols = get_required_columns(result.mappings[1].source_column)  # This is a simplification
-        unmapped_required = length(intersect(result.unmapped_target_columns, required_cols))
-        if unmapped_required > 0
-            push!(validation["warnings"], "$unmapped_required required columns remain unmapped")
+    if target_schema !== nothing && !isempty(result.unmapped_target_columns)
+        required_cols = get_required_columns(target_schema)
+        unmapped_required = intersect(result.unmapped_target_columns, required_cols)
+        validation["unmapped_required_columns"] = unmapped_required
+        if !isempty(unmapped_required)
+            push!(validation["warnings"],
+                  string(length(unmapped_required)) * " required columns remain unmapped: " *
+                  join(unmapped_required, ", "))
         end
     end
 
