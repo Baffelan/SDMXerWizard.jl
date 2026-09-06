@@ -28,9 +28,9 @@ appropriate underlying implementation based on the specified method.
 - `target_schema`: DataflowSchema defining the SDMX structure
 - `method::Symbol=:heuristic`: Mapping method to use
   - `:heuristic` - Basic name matching and type-based inference (fast, no external dependencies)
-  - `:fuzzy` - Advanced fuzzy matching with statistical analysis
+  - `:fuzzy` - Fuzzy name matching with statistical analysis (no codelist fetch, no LLM)
   - `:llm` - LLM-powered mapping using configured AI provider
-  - `:advanced` - Combination of all methods with confidence scoring
+  - `:advanced` - Fuzzy matching, statistical analysis and codelist value matching with confidence scoring (no LLM)
 
 # Keyword Arguments
 - `llm_provider::Symbol=:ollama`: LLM provider for AI methods (:openai, :anthropic, :ollama)
@@ -97,11 +97,12 @@ function infer_mappings(source_data, target_schema::DataflowSchema;
 
     elseif method == :fuzzy
         verbose && println("Using fuzzy matching method...")
+        # Name-based fuzzy matching plus statistical analysis; codelist value
+        # matching is switched off so no codelists are fetched.
         engine = create_inference_engine(;
-            confidence_threshold=confidence_threshold,
-            use_fuzzy_matching=true,
-            use_value_matching=false,
-            use_llm=false)
+            min_confidence=confidence_threshold,
+            use_statistical_analysis=true,
+            use_value_matching=false)
 
         # Get source DataFrame if needed
         df = isa(source_data, DataFrame) ? source_data : read_source_data(source_profile.file_path)
@@ -133,13 +134,13 @@ function infer_mappings(source_data, target_schema::DataflowSchema;
 
     elseif method == :advanced
         verbose && println("Using advanced mapping with all techniques...")
+        # Fuzzy name matching, statistical analysis and (optionally) codelist
+        # value matching. The inference engine does not call an LLM; use
+        # method=:llm for LLM-based mapping.
         engine = create_inference_engine(;
-            confidence_threshold=confidence_threshold,
-            use_fuzzy_matching=true,
-            use_value_matching=use_codelists,
-            use_llm=(llm_provider != :none),
-            llm_provider=llm_provider,
-            llm_model=llm_model)
+            min_confidence=confidence_threshold,
+            use_statistical_analysis=true,
+            use_value_matching=use_codelists)
 
         # Get source DataFrame if needed
         df = isa(source_data, DataFrame) ? source_data : read_source_data(source_profile.file_path)
@@ -366,6 +367,7 @@ mutable struct InferenceEngine
     min_confidence::Float64
     use_statistical_analysis::Bool
     enable_learning::Bool
+    use_value_matching::Bool
 end
 
 """
@@ -382,6 +384,7 @@ datasets and SDMX schemas.
 - `min_confidence::Float64=0.3`: Minimum confidence threshold for mapping suggestions
 - `use_statistical_analysis::Bool=true`: Enable statistical compatibility analysis
 - `enable_learning::Bool=true`: Enable learning from user feedback
+- `use_value_matching::Bool=true`: Fetch the schema's codelists and match source values against them
 
 # Returns
 - `InferenceEngine`: Configured inference engine ready for mapping analysis
@@ -409,7 +412,8 @@ result = infer_advanced_mappings(engine, source_profile, target_schema, source_d
 function create_inference_engine(;fuzzy_threshold=0.6,
                                 min_confidence=0.3,
                                 use_statistical_analysis=true,
-                                enable_learning=true)
+                                enable_learning=true,
+                                use_value_matching=true)
     return InferenceEngine(
         nothing,  # source_profile
         nothing,  # target_schema
@@ -420,7 +424,8 @@ function create_inference_engine(;fuzzy_threshold=0.6,
         fuzzy_threshold,
         min_confidence,
         use_statistical_analysis,
-        enable_learning
+        enable_learning,
+        use_value_matching
     )
 end
 
@@ -759,8 +764,10 @@ function infer_advanced_mappings(engine::InferenceEngine,
     engine.source_profile = source_profile
     engine.target_schema = target_schema
 
-    # Load codelist data if needed
-    load_codelist_data!(engine, target_schema)
+    # Load codelist data if value matching is enabled
+    if engine.use_value_matching
+        load_codelist_data!(engine, target_schema)
+    end
 
     mapping_candidates = Vector{MappingCandidate}()
 
