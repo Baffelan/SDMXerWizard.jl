@@ -256,6 +256,10 @@ using Dates
         include("test_cross_dataflow.jl")
     end
 
+    @testset "Korea Dry Run Regressions" begin
+        include("test_korea_dryrun.jl")
+    end
+
     @testset "Script Guidance" begin
         # Setup test data
         test_data = DataFrame(
