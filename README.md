@@ -39,12 +39,17 @@ Pkg.add(url="https://github.com/Baffelan/SDMXerWizard.jl")
 
 ## Quick Start
 
+`using SDMXerWizard` also brings the SDMXer.jl entry points the examples below rely on
+(`extract_dataflow_schema`, `extract_all_codelists`, `get_required_columns`,
+`get_optional_columns`, `DataflowSchema`) into scope. For the rest of the SDMXer.jl API
+(validation, joins, data fetching) add `using SDMXer`.
+
 ### Basic Usage
 
 ```julia
 using SDMXerWizard
 
-# Load SDMX schema from API
+# Load SDMX schema from API (extract_dataflow_schema is re-exported from SDMXer.jl)
 url = "https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/latest?references=all"
 schema = extract_dataflow_schema(url)
 
