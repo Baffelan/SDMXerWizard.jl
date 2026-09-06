@@ -430,7 +430,7 @@ function create_inference_engine(;fuzzy_threshold=0.6,
 end
 
 """
-    fuzzy_match_score(str1::String, str2::String) -> Float64
+    fuzzy_match_score(str1::AbstractString, str2::AbstractString) -> Float64
 
 Calculates comprehensive fuzzy matching score between strings using multiple algorithms.
 
@@ -439,8 +439,8 @@ similarity, substring matching, token-based similarity, and semantic similarity
 to produce a comprehensive matching score for data mapping inference.
 
 # Arguments
-- `str1::String`: First string to compare
-- `str2::String`: Second string to compare
+- `str1::AbstractString`: First string to compare
+- `str2::AbstractString`: Second string to compare
 
 # Returns
 - `Float64`: Similarity score between 0.0 (no match) and 1.0 (perfect match)
@@ -463,10 +463,10 @@ score = fuzzy_match_score("time_period", "period")  # ~0.7
 # See also
 [`analyze_value_patterns`](@ref), [`create_inference_engine`](@ref)
 """
-function fuzzy_match_score(str1::String, str2::String)
-    # Normalize strings
-    s1 = lowercase(strip(str1))
-    s2 = lowercase(strip(str2))
+function fuzzy_match_score(str1::AbstractString, str2::AbstractString)
+    # Normalize strings (convert to String so InlineStrings and SubStrings behave alike)
+    s1 = lowercase(strip(String(str1)))
+    s2 = lowercase(strip(String(str2)))
 
     if s1 == s2
         return 1.0
@@ -575,11 +575,11 @@ function fuzzy_match_score(str1::String, str2::String)
 end
 
 """
-    analyze_value_patterns(source_values::Vector, target_codelist::DataFrame) -> Dict{String, Any}
+    analyze_value_patterns(source_values::AbstractVector, target_codelist::DataFrame) -> Dict{String, Any}
 
 Analyzes patterns in source values against target codelist to find matches and transformations.
 """
-function analyze_value_patterns(source_values::Vector, target_codelist::DataFrame)
+function analyze_value_patterns(source_values::AbstractVector, target_codelist::DataFrame)
     analysis = Dict{String, Any}(
         "exact_matches" => 0,
         "fuzzy_matches" => 0,
@@ -888,16 +888,17 @@ end
 
 """
     analyze_column_mapping(engine::InferenceEngine, source_col::ColumnProfile,
-                          target_col::String, source_data::Vector,
+                          target_col::AbstractString, source_data::AbstractVector,
                           target_schema::DataflowSchema) -> Union{MappingCandidate, Nothing}
 
 Analyzes a specific source-target column mapping.
 """
 function analyze_column_mapping(engine::InferenceEngine,
                                source_col::ColumnProfile,
-                               target_col::String,
-                               source_data::Vector,
+                               target_col::AbstractString,
+                               source_data::AbstractVector,
                                target_schema::DataflowSchema)
+    target_col = String(target_col)
 
     evidence = Dict{String, Any}()
     confidence_score = 0.0
@@ -995,11 +996,11 @@ function analyze_column_mapping(engine::InferenceEngine,
 end
 
 """
-    get_target_column_info(target_col::String, target_schema::DataflowSchema) -> Union{NamedTuple, Nothing}
+    get_target_column_info(target_col::AbstractString, target_schema::DataflowSchema) -> Union{NamedTuple, Nothing}
 
 Gets information about a target column from the schema.
 """
-function get_target_column_info(target_col::String, target_schema::DataflowSchema)
+function get_target_column_info(target_col::AbstractString, target_schema::DataflowSchema)
     # Check dimensions
     if nrow(target_schema.dimensions) > 0
         dim_matches = filter(row -> row.dimension_id == target_col, target_schema.dimensions)
@@ -1122,11 +1123,11 @@ function assess_statistical_compatibility(source_col::ColumnProfile, target_info
 end
 
 """
-    apply_learning_boost(engine::InferenceEngine, source_name::String, target_name::String) -> Float64
+    apply_learning_boost(engine::InferenceEngine, source_name::AbstractString, target_name::AbstractString) -> Float64
 
 Applies learning-based confidence boost based on historical patterns.
 """
-function apply_learning_boost(engine::InferenceEngine, source_name::String, target_name::String)
+function apply_learning_boost(engine::InferenceEngine, source_name::AbstractString, target_name::AbstractString)
     boost = 0.0
 
     # Create pattern key
@@ -1334,13 +1335,13 @@ end
 
 """
     suggest_value_transformations(mapping::MappingCandidate,
-                                 source_data::Vector,
+                                 source_data::AbstractVector,
                                  target_schema::DataflowSchema) -> Vector{String}
 
 Suggests specific value transformation code for a mapping.
 """
 function suggest_value_transformations(mapping::MappingCandidate,
-                                     source_data::Vector,
+                                     source_data::AbstractVector,
                                      target_schema::DataflowSchema)
 
     transformations = String[]
