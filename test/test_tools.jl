@@ -64,3 +64,26 @@ end
     without = Tools.run_tool(session, Tools.lookup_codes, Dict("schema_id" => nocl, "dimension" => "REF_AREA"))
     @test occursin("with_codelists", without["hint"])
 end
+
+@testset "infer_mappings tool" begin
+    session = Tools.Session()
+    sid = Tools.run_tool(session, Tools.load_source, Dict("path" => DEMO_CSV))["source_id"]
+    schid = Tools.register_schema!(session, fixture_schema(), fixture_codelists(); origin="fixture")
+    for method in ["heuristic", "fuzzy", "advanced"]
+        out = Tools.run_tool(session, Tools.infer_mappings,
+            Dict("source_id" => sid, "schema_id" => schid, "method" => method, "confidence_threshold" => 0.2))
+        @test !haskey(out, "error")
+        @test roundtrip(out)["method"] == method
+        targets = [m["target_column"] for m in out["mappings"]]
+        @test "VISITOR_TYPE" in targets
+        vt = only(filter(m -> m["target_column"] == "VISITOR_TYPE", out["mappings"]))
+        @test "Visitor type" in [c["source_column"] for c in vt["candidates"]]
+        @test vt["candidates"][1]["source_column"] == "Visitor type"
+        @test vt["codelist_id"] == "CL_VISITOR_TYPE"
+        @test haskey(out, "unmapped_required_columns")
+        @test out["warnings"] isa Vector
+    end
+    @test Tools.get_source(session, sid).last_mapping isa AdvancedMappingResult
+    bad = Tools.run_tool(session, Tools.infer_mappings, Dict("source_id" => sid, "schema_id" => schid, "method" => "llm"))
+    @test occursin("heuristic", bad["hint"])
+end

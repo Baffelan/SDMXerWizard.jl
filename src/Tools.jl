@@ -354,4 +354,94 @@ function lookup_codes(session::Session; schema_id, dimension, query=nothing, lim
                              "matches" => matches, "truncated" => length(scored) > lim)
 end
 
+# ---------------------------------------------------------------- mappings
+
+const MAPPING_METHODS = ("heuristic", "fuzzy", "advanced")
+
+function jsonable(m::MappingCandidate)
+    return Dict{String, Any}(
+        "source_column" => m.source_column,
+        "target_column" => m.target_column,
+        "confidence" => jsonable(m.confidence_score),
+        "confidence_level" => string(m.confidence_level),
+        "match_type" => m.match_type,
+        "evidence" => jsonable(m.evidence),
+        "suggested_transformation" => jsonable(m.suggested_transformation),
+        "notes" => m.validation_notes)
+end
+
+# Give the engine the codelists already held in the session so it never fetches.
+function preload_codelists!(engine, entry::SchemaEntry)
+    entry.codelists === nothing && return engine
+    for g in groupby(entry.codelists, :codelist_id)
+        engine.codelists_data[String(first(g.codelist_id))] = DataFrame(g)
+    end
+    return engine
+end
+
+function target_order(schema::DataflowSchema)
+    order = String[]
+    append!(order, schema.dimensions.dimension_id)
+    schema.time_dimension === nothing || push!(order, schema.time_dimension.dimension_id)
+    append!(order, schema.measures.measure_id)
+    append!(order, schema.attributes.attribute_id)
+    return order
+end
+
+"""
+    mapping_report(result, entry) -> Dict
+
+Candidates grouped by target column in schema order, plus the unmapped
+columns and the warnings from `validate_mapping_quality`.
+"""
+function mapping_report(result::AdvancedMappingResult, entry::SchemaEntry)
+    schema = entry.schema
+    grouped = Dict{String, Vector{MappingCandidate}}()
+    for m in result.mappings
+        push!(get!(grouped, m.target_column, MappingCandidate[]), m)
+    end
+    mappings = Any[]
+    for t in target_order(schema)
+        haskey(grouped, t) || continue
+        cands = sort(grouped[t]; by=c -> c.confidence_score, rev=true)
+        push!(mappings, Dict{String, Any}("target_column" => t,
+            "codelist_id" => jsonable(codelist_for(entry, t)),
+            "candidates" => Any[jsonable(c) for c in cands]))
+    end
+    quality = validate_mapping_quality(result, schema)
+    return Dict{String, Any}(
+        "mappings" => mappings,
+        "unmapped_source_columns" => result.unmapped_source_columns,
+        "unmapped_target_columns" => result.unmapped_target_columns,
+        "unmapped_required_columns" => intersect(result.unmapped_target_columns, get_required_columns(schema)),
+        "quality_score" => jsonable(result.quality_score),
+        "recommendations" => result.recommendations,
+        "warnings" => vcat(quality["critical_issues"], quality["warnings"]))
+end
+
+"""
+    infer_mappings(session; source_id, schema_id, method="advanced", confidence_threshold=0.3)
+
+Rank source columns against the target columns of a schema. `heuristic` uses
+column names only, `fuzzy` adds statistical analysis, `advanced` adds codelist
+value matching. The result is kept on the source for `transformation_plan`.
+"""
+function infer_mappings(session::Session; source_id, schema_id, method="advanced", confidence_threshold=0.3)
+    m = String(method)
+    m in MAPPING_METHODS || throw(ToolError("Unknown method " * m,
+        "method must be one of: " * join(MAPPING_METHODS, ", ")))
+    src = get_source(session, source_id)
+    entry = get_schema(session, schema_id)
+    engine = create_inference_engine(min_confidence=Float64(confidence_threshold),
+        use_statistical_analysis=(m != "heuristic"), use_value_matching=(m == "advanced"))
+    m == "advanced" && preload_codelists!(engine, entry)
+    result = infer_advanced_mappings(engine, src.profile, entry.schema, src.data)
+    src.last_mapping = result
+    out = mapping_report(result, entry)
+    out["method"] = m
+    out["source_id"] = String(source_id)
+    out["schema_id"] = String(schema_id)
+    return out
+end
+
 end # module Tools
