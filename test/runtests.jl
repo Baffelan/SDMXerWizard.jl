@@ -2,8 +2,6 @@ using Test
 using SDMXer
 using SDMXerWizard
 using DataFrames
-using HTTP
-using PromptingTools
 using Dates
 
 @testset "SDMXerWizard.jl Tests" begin
@@ -11,34 +9,6 @@ using Dates
     # Run Aqua quality checks first
     @testset "Code Quality (Aqua.jl)" begin
         include("aqua.jl")
-    end
-
-    @testset "LLM Integration" begin
-        # Test LLM configuration setup
-        ollama_config = setup_sdmx_llm(:ollama; model="llama2")
-        @test ollama_config isa SDMXerWizard.LLMProvider
-
-        # Test that LLM provider enums are exported
-        @test SDMXerWizard.OLLAMA isa SDMXerWizard.LLMProvider
-        @test SDMXerWizard.OPENAI isa SDMXerWizard.LLMProvider
-        @test SDMXerWizard.ANTHROPIC isa SDMXerWizard.LLMProvider
-        @test SDMXerWizard.GOOGLE isa SDMXerWizard.LLMProvider
-
-        # Test enum string conversion
-        @test length(string(SDMXerWizard.OLLAMA)) > 0
-        @test length(string(SDMXerWizard.OPENAI)) > 0
-    end
-
-    @testset "Excel Structure Analysis" begin
-        # Create a simple test Excel file in memory simulation
-        test_excel_data = DataFrame(
-            Country = ["FJ", "TV", "FJ", "TV"],
-            Y2020 = [85.2, 92.1, 78.9, 89.7],
-            Y2021 = [87.1, 93.5, 82.3, 91.2],
-            Y2022 = [88.3, 94.1, 84.1, 92.6]
-        )
-        @test nrow(test_excel_data) == 4
-        @test ncol(test_excel_data) == 4
     end
 
     @testset "Advanced Mapping Inference" begin
@@ -73,21 +43,10 @@ using Dates
         @test haskey(hierarchy_analysis, "parent_child_relationships")
     end
 
-    @testset "Script Generation" begin
-        # Test script generator setup
-        test_llm_config = setup_sdmx_llm(:ollama; model="llama2")
-        script_generator = create_script_generator(:ollama, "llama2")
-        @test script_generator.provider == :ollama
-        @test script_generator.model == "llama2"
-        @test script_generator.include_validation == true
-        @test script_generator.include_comments == true
-        @test script_generator.tidier_style == "pipes"
-        @test haskey(script_generator.templates, "standard_transformation")
-        @test haskey(script_generator.templates, "pivot_transformation")
-        @test haskey(script_generator.templates, "excel_multi_sheet")
-        @test haskey(script_generator.templates, "simple_csv")
+    @testset "Templates" begin
+        templates = default_templates()
+        @test Set(keys(templates)) == Set(["standard_transformation", "pivot_transformation", "excel_multi_sheet", "simple_csv"])
 
-        # Test template creation
         standard_template = SDMXerWizard.create_standard_template()
         @test standard_template.template_name == "standard_transformation"
         @test haskey(standard_template.template_sections, "header")
@@ -197,8 +156,6 @@ using Dates
     end
 
     @testset "Template Selection" begin
-        # Setup
-        script_generator = create_script_generator(:ollama, "llama2")
         test_data = DataFrame(
             country = ["FJ", "TV"],
             year = [2020, 2021],
@@ -206,16 +163,15 @@ using Dates
         )
         profile = profile_source_data(test_data, "test.csv")
 
-        # Test template selection
-        selected_template = SDMXerWizard.select_template(script_generator, profile, nothing, "")
+        selected_template = select_template(profile)
         @test selected_template.template_name in ["standard_transformation", "simple_csv"]
+        @test select_template(profile; template_name="pivot_transformation").template_name == "pivot_transformation"
 
-        # CSV template should be selected for simple CSV files
         simple_csv_profile = SourceDataProfile(
             "simple.csv", "csv", 4, 3, profile.columns[1:3], 1.0,
             String[], String[], String[]
         )
-        csv_template = SDMXerWizard.select_template(script_generator, simple_csv_profile, nothing, "")
+        csv_template = select_template(simple_csv_profile)
         @test csv_template.template_name == "simple_csv"
     end
 
@@ -252,32 +208,8 @@ using Dates
         @test occursin("PREVIEW", uppercase(preview_text))
     end
 
-    @testset "Cross-Dataflow" begin
-        include("test_cross_dataflow.jl")
-    end
-
     @testset "Korea Dry Run Regressions" begin
         include("test_korea_dryrun.jl")
-    end
-
-    @testset "Script Guidance" begin
-        # Setup test data
-        test_data = DataFrame(
-            country = ["FJ", "TV"],
-            year = [2020, 2021],
-            value = [85.2, 92.1]
-        )
-        profile = profile_source_data(test_data, "test.csv")
-        schema_for_test = extract_dataflow_schema("https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/latest?references=all")
-        inference_engine = SDMXerWizard.create_inference_engine(fuzzy_threshold=0.6, min_confidence=0.2)
-        advanced_mapping = infer_advanced_mappings(inference_engine, profile, schema_for_test, test_data)
-        transformation_steps = build_transformation_steps(advanced_mapping, profile, schema_for_test)
-
-        # Test guidance creation
-        validation_notes, user_guidance = SDMXerWizard.create_script_guidance(advanced_mapping, transformation_steps, profile, schema_for_test)
-        @test length(validation_notes) > 0
-        @test length(user_guidance) > 0
-        @test any(note -> occursin("required", lowercase(note)), validation_notes)
     end
 
 end # End of main testset

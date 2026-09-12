@@ -20,7 +20,7 @@ This module provides intelligent mapping between source data and SDMX schemas us
 Unified interface for inferring column mappings between source data and SDMX schema.
 
 This function provides a single entry point for all mapping inference methods,
-from simple heuristics to advanced LLM-powered analysis. It dispatches to the
+from simple name heuristics to codelist value matching. It dispatches to the
 appropriate underlying implementation based on the specified method.
 
 # Arguments
@@ -29,12 +29,9 @@ appropriate underlying implementation based on the specified method.
 - `method::Symbol=:heuristic`: Mapping method to use
   - `:heuristic` - Basic name matching and type-based inference (fast, no external dependencies)
   - `:fuzzy` - Fuzzy name matching with statistical analysis (no codelist fetch, no LLM)
-  - `:llm` - LLM-powered mapping using configured AI provider
   - `:advanced` - Fuzzy matching, statistical analysis and codelist value matching with confidence scoring (no LLM)
 
 # Keyword Arguments
-- `llm_provider::Symbol=:ollama`: LLM provider for AI methods (:openai, :anthropic, :ollama)
-- `llm_model::String=""`: Specific model to use (provider-dependent)
 - `confidence_threshold::Float64=0.5`: Minimum confidence for fuzzy/advanced methods
 - `max_suggestions::Int=3`: Maximum number of suggestions per target column
 - `use_codelists::Bool=true`: Whether to use codelist validation in advanced method
@@ -47,12 +44,6 @@ appropriate underlying implementation based on the specified method.
 ```julia
 # Basic heuristic mapping
 mappings = infer_mappings(my_data, schema)
-
-# LLM-powered mapping
-mappings = infer_mappings(my_data, schema;
-    method=:llm,
-    llm_provider=:openai,
-    llm_model="gpt-4")
 
 # Advanced mapping with all techniques
 mappings = infer_mappings(my_data, schema;
@@ -70,8 +61,6 @@ mappings = infer_mappings(profile, schema; method=:fuzzy)
 """
 function infer_mappings(source_data, target_schema::DataflowSchema;
                        method::Symbol=:heuristic,
-                       llm_provider::Symbol=:ollama,
-                       llm_model::String="",
                        confidence_threshold::Float64=0.5,
                        max_suggestions::Int=3,
                        use_codelists::Bool=true,
@@ -109,34 +98,10 @@ function infer_mappings(source_data, target_schema::DataflowSchema;
         result = infer_advanced_mappings(engine, source_profile, target_schema, df)
         return _format_mapping_result(result, max_suggestions)
 
-    elseif method == :llm
-        verbose && println("Using LLM mapping method with " * string(llm_provider) * "...")
-
-        # Get source DataFrame if needed
-        df = isa(source_data, DataFrame) ? source_data :
-             !isempty(source_profile.file_path) ? read_source_data(source_profile.file_path) :
-             error("Need DataFrame for LLM mapping")
-
-        # Use existing LLM mapping function
-        if llm_provider == :ollama || isempty(string(llm_provider))
-            result_struct = infer_column_mappings(df, target_schema; model=llm_model)
-            result = _format_llm_mapping_result(result_struct, target_schema)
-        else
-            source_columns = names(df)
-            result_message = infer_sdmx_column_mappings(source_columns, target_schema;
-                                                    provider=llm_provider,
-                                                    model=llm_model)
-            result_text = hasproperty(result_message, :content) ? result_message.content : result_message
-            # Parse text result into Dict format
-            result = _parse_llm_mapping_text(string(result_text), source_columns, target_schema)
-        end
-        return result
-
     elseif method == :advanced
         verbose && println("Using advanced mapping with all techniques...")
         # Fuzzy name matching, statistical analysis and (optionally) codelist
-        # value matching. The inference engine does not call an LLM; use
-        # method=:llm for LLM-based mapping.
+        # value matching.
         engine = create_inference_engine(;
             min_confidence=confidence_threshold,
             use_statistical_analysis=true,
@@ -149,88 +114,11 @@ function infer_mappings(source_data, target_schema::DataflowSchema;
 
     else
         throw(ArgumentError("Unknown mapping method: " * string(method) *
-                          ". Use :heuristic, :fuzzy, :llm, or :advanced"))
+                          ". Use :heuristic, :fuzzy, or :advanced"))
     end
 end
 
-# Helper to parse LLM text response into Dict format
-function _parse_llm_mapping_text(text::String, source_columns::Vector{String},
-                                target_schema::DataflowSchema)
-    mappings = Dict{String, Vector{String}}()
 
-    # Get all target columns
-    all_targets = vcat(
-        target_schema.dimensions.dimension_id,
-        target_schema.time_dimension !== nothing ? [target_schema.time_dimension.dimension_id] : String[],
-        target_schema.measures.measure_id,
-        target_schema.attributes.attribute_id
-    )
-
-    # Simple parsing: look for patterns like "target_col -> source_col"
-    lines = split(text, '\n')
-    for line in lines
-        if occursin("->", line) || occursin("=>", line) || occursin(":", line)
-            parts = split(line, r"->|=>|:")
-            if length(parts) == 2
-                target = strip(parts[1])
-                source = strip(parts[2])
-
-                # Clean up common formatting
-                target = replace(target, r"^[-*•]\s*" => "")
-                source = replace(source, r"[,;]$" => "")
-
-                if target in all_targets && source in source_columns
-                    if !haskey(mappings, target)
-                        mappings[target] = String[]
-                    end
-                    push!(mappings[target], source)
-                end
-            end
-        end
-    end
-
-    return mappings
-end
-
-# Helper to normalize structured LLM mapping result into Dict format
-function _format_llm_mapping_result(result::SDMXMappingResult, target_schema::DataflowSchema)
-    mappings = Dict{String, Vector{String}}()
-
-    all_targets = vcat(
-        target_schema.dimensions.dimension_id,
-        target_schema.time_dimension !== nothing ? [target_schema.time_dimension.dimension_id] : String[],
-        target_schema.measures.measure_id,
-        target_schema.attributes.attribute_id
-    )
-
-    source_set = Set(result.source_columns)
-
-    for mapping in result.suggested_mappings
-        target = get(mapping, "target_column",
-                 get(mapping, "target",
-                 get(mapping, "sdmx_dimension",
-                 get(mapping, "sdmx_column", nothing))))
-        source = get(mapping, "source_column",
-                 get(mapping, "source",
-                 get(mapping, "source_col", nothing)))
-
-        if target === nothing || source === nothing
-            continue
-        end
-
-        target_str = string(target)
-        source_str = string(source)
-
-        if target_str in all_targets && (isempty(source_set) || source_str in source_set)
-            if !haskey(mappings, target_str)
-                mappings[target_str] = String[]
-            end
-            push!(mappings[target_str], source_str)
-        end
-    end
-
-    return mappings
-end
 
 
 """
@@ -853,7 +741,7 @@ function load_codelist_data!(engine::InferenceEngine, target_schema::DataflowSch
         end
     end
 
-    if isempty(codelist_refs)
+    if isempty(codelist_refs) || all(ref -> haskey(engine.codelists_data, ref), codelist_refs)
         return
     end
 

@@ -15,11 +15,8 @@ makedocs(
         "API Reference" => [
             "Data Profiling" => "api/profiling.md",
             "Mapping Inference" => "api/mapping.md",
-            "Script Generation" => "api/scripts.md",
-            "Workflow" => "api/workflow.md",
-            "Cross-Dataflow" => "api/crossdataflow.md",
-            "LLM Integration" => "api/llm.md",
-            "Prompts" => "api/prompts.md",
+            "Script Planning" => "api/scripts.md",
+            "MCP Tools" => "api/mcp.md",
         ],
     ],
     checkdocs = :exports,

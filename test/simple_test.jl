@@ -1,27 +1,10 @@
 using Test
 using SDMXer
 using SDMXerWizard
-using PromptingTools
 using DataFrames
 
 @testset "SDMXerWizard Basic Tests" begin
 
-    @testset "LLM Setup" begin
-        # Test that setup_sdmx_llm works
-        provider = setup_sdmx_llm(:ollama; model="llama2")
-        @test provider == SDMXerWizard.OLLAMA
-
-        # Test that enums are exported
-        @test SDMXerWizard.OLLAMA isa SDMXerWizard.LLMProvider
-        @test SDMXerWizard.OPENAI isa SDMXerWizard.LLMProvider
-
-        # Test automatic Responses API schema selection for response-only models
-        response_schema = SDMXerWizard._select_openai_schema("gpt-5.1-codex-mini")
-        @test response_schema isa PromptingTools.OpenAIResponseSchema
-
-        chat_schema = SDMXerWizard._select_openai_schema("gpt-4o")
-        @test chat_schema isa PromptingTools.OpenAISchema
-    end
 
     @testset "Data Sources" begin
         # Test CSV source with actual file
@@ -43,10 +26,7 @@ using DataFrames
 
     @testset "Basic Functions" begin
         # Test that key functions are exported and accessible
-        @test isdefined(SDMXerWizard, :setup_sdmx_llm)
         @test isdefined(SDMXerWizard, :create_workflow)
-        @test isdefined(SDMXerWizard, :generate_transformation_script)
-        @test isdefined(SDMXerWizard, :infer_column_mappings)
         @test isdefined(SDMXerWizard, :create_inference_engine)
         @test isdefined(SDMXerWizard, :anonymize_source_data)
         @test isdefined(SDMXerWizard, :summarize_anonymized_data)

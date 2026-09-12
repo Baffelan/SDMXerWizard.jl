@@ -1,6 +1,6 @@
 name = "SDMXerWizard"
 uuid = "5bf9ff8a-8115-426c-8d6d-96131ecc5d37"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Giulio Valentino Dalla Riva <me@gvdallariva.net>"]
 
 [deps]
@@ -10,7 +10,8 @@ Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 EzXML = "8f5d6c58-4d21-5cfd-889c-e3ad7ee6a615"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
-PromptingTools = "670122d1-24a8-4d70-bfce-740807c42192"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+ModelContextProtocol = "c58f755f-f2a7-4f48-bf29-4e9659b78499"
 SDMXer = "88354817-cd1f-48b9-9770-05d0dc5d6299"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
@@ -18,15 +19,9 @@ XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [weakdeps]
-GoogleGenAI = "903d41d1-eaca-47dd-943b-fee3930375ab"
-Llama = "cf710eda-36f8-4e2c-91a4-6b3b3b6b3b6b"
-OpenAI = "e9f21f70-7185-4079-abb2-f84d60a39d84"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 
 [extensions]
-SDMXerWizardGoogleGenAIExt = "GoogleGenAI"
-SDMXerWizardLlamaExt = "Llama"
-SDMXerWizardOpenAIExt = "OpenAI"
 SDMXerWizardPlotsExt = "Plots"
 
 [compat]
@@ -35,20 +30,18 @@ CSV = "0.10"
 DataFrames = "1"
 Dates = "1"
 EzXML = "1"
-GoogleGenAI = "0.5.1"
 HTTP = "1"
 JSON3 = "1"
-Llama = "0.1"
-OpenAI = "0.11"
+Logging = "1.11.0"
+ModelContextProtocol = "0.7"
 Plots = "1"
-PromptingTools = "0.81"
 SDMXer = "0.1.0"
 Statistics = "1"
 StatsBase = "0.34"
 Test = "1"
 XLSX = "0.10"
 YAML = "0.4"
-julia = "1.9, 1.10, 1.11, 1.12"
+julia = "1.12"
 
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
