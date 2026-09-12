@@ -212,4 +212,8 @@ using Dates
         include("test_korea_dryrun.jl")
     end
 
+    @testset "Tools" begin
+        include("test_tools.jl")
+    end
+
 end # End of main testset

@@ -8,49 +8,7 @@ using CSV
 # (September 2026). Everything here runs offline: the target schema is a
 # hand-built DataflowSchema with no codelists, so no codelist fetch happens.
 
-# Small tourism-like schema modelled on OECD DF_INBOUND (dimensions, a time
-# dimension, a measure, one mandatory and one conditional attribute).
-function _dryrun_schema()
-    dimensions = DataFrame(
-        dimension_id = ["REF_AREA", "COUNTERPART_AREA", "VISITOR_TYPE", "MEASURE"],
-        position = [1, 2, 3, 4],
-        concept_id = ["REF_AREA", "COUNTERPART_AREA", "VISITOR_TYPE", "MEASURE"],
-        concept_scheme = fill(missing, 4),
-        codelist_id = fill(missing, 4),
-        codelist_agency = fill(missing, 4),
-        codelist_version = fill(missing, 4),
-        data_type = fill(missing, 4),
-        is_time_dimension = fill(false, 4)
-    )
-    attributes = DataFrame(
-        attribute_id = ["UNIT_MEASURE", "OBS_STATUS"],
-        assignment_status = ["Mandatory", "Conditional"],
-        concept_id = ["UNIT_MEASURE", "OBS_STATUS"],
-        concept_scheme = fill(missing, 2),
-        codelist_id = fill(missing, 2),
-        codelist_agency = fill(missing, 2),
-        codelist_version = fill(missing, 2),
-        data_type = fill(missing, 2),
-        relationship = ["Dimension", "Observation"]
-    )
-    measures = DataFrame(
-        measure_id = ["OBS_VALUE"],
-        concept_id = ["OBS_VALUE"],
-        concept_scheme = [missing],
-        data_type = ["Double"]
-    )
-    time_dimension = (
-        dimension_id = "TIME_PERIOD", position = 5, concept_id = "TIME_PERIOD",
-        concept_scheme = missing, codelist_id = missing, codelist_agency = missing,
-        codelist_version = missing, data_type = "ObservationalTimePeriod",
-        is_time_dimension = true
-    )
-    dataflow_info = (
-        id = "DF_INBOUND", agency = "TEST", version = "1.0",
-        name = "Inbound tourism (test)", description = missing, dsd_id = "DSD_TEST"
-    )
-    return DataflowSchema(dataflow_info, dimensions, attributes, measures, time_dimension)
-end
+@isdefined(fixture_schema) || include("fixtures.jl")
 
 const DRYRUN_CSV = "Market,Visitor type,Year,Visitors ('000)\n" *
                    "China,Overnight visitors,2015,5984\n" *
@@ -59,7 +17,7 @@ const DRYRUN_CSV = "Market,Visitor type,Year,Visitors ('000)\n" *
                    "Japan,Same-day visitors,2016,2298\n"
 
 @testset "Korea dry run regressions" begin
-    schema = _dryrun_schema()
+    schema = fixture_schema(with_codelists=false)
 
     @testset "infer_mappings method=:fuzzy" begin
         df = DataFrame(

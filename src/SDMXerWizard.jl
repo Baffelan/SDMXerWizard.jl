@@ -39,6 +39,10 @@ include("SDMXDataProfiling.jl")
 include("SDMXAnonymization.jl")
 include("SDMXMappingInference.jl")
 include("SDMXScriptGeneration.jl")
+include("Tools.jl")
+
+# === TOOL SURFACE ===
+export Tools
 
 # === RE-EXPORTED FROM SDMXer ===
 export DataflowSchema, extract_dataflow_schema, extract_all_codelists
