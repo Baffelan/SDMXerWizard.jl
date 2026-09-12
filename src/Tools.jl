@@ -444,4 +444,136 @@ function infer_mappings(session::Session; source_id, schema_id, method="advanced
     return out
 end
 
+# ---------------------------------------------------------------- plan
+
+const SCRIPT_CONTRACT = """
+The script is evaluated in a fresh module where `source` is the loaded source DataFrame \
+and the packages DataFrames, CSV and Dates are already in scope, together with SDMXer. \
+Do not read the file again. The script must assign a DataFrame to a variable named \
+`result` whose columns are the SDMx columns of the target schema: dimensions in order, \
+TIME_PERIOD, OBS_VALUE, then attributes. Code values must be codelist ids, never labels. \
+Use string concatenation rather than string interpolation."""
+
+function jsonable(s::TransformationStep)
+    return Dict{String, Any}(
+        "name" => s.step_name, "operation_type" => s.operation_type,
+        "function" => s.tidier_function, "description" => s.description,
+        "source_columns" => s.source_columns, "target_columns" => s.target_columns,
+        "logic" => s.transformation_logic, "validation_checks" => s.validation_checks,
+        "comments" => s.comments)
+end
+
+"""
+    choose_mappings(result, overrides, entry, src) -> AdvancedMappingResult
+
+One candidate per target column: the override when given, otherwise the
+highest-confidence inferred candidate.
+"""
+function choose_mappings(result::AdvancedMappingResult, overrides::Dict{String, String},
+                         entry::SchemaEntry, src::SourceEntry)
+    best = Dict{String, MappingCandidate}()
+    for m in result.mappings
+        if !haskey(best, m.target_column) || m.confidence_score > best[m.target_column].confidence_score
+            best[m.target_column] = m
+        end
+    end
+    source_names = names(src.data)
+    for (target, source) in overrides
+        source in source_names || throw(ToolError("Source column " * source * " does not exist",
+            "Source columns: " * join(source_names, ", ")))
+        best[target] = MappingCandidate(source, target, 1.0, MappingConfidence(5), "user",
+            Dict{String, Any}("origin" => "override"), nothing, String[])
+    end
+    order = target_order(entry.schema)
+    chosen = MappingCandidate[best[t] for t in order if haskey(best, t)]
+    mapped_sources = Set(m.source_column for m in chosen)
+    mapped_targets = Set(m.target_column for m in chosen)
+    return AdvancedMappingResult(chosen, result.coverage_analysis,
+        String[c for c in source_names if !(c in mapped_sources)],
+        String[t for t in order if !(t in mapped_targets)],
+        result.quality_score, result.recommendations, result.transformation_complexity)
+end
+
+const MAX_RECODE_VALUES = 50
+
+function code_candidates(value::String, codes::DataFrame)
+    lv = lowercase(value)
+    scored = Tuple{Float64, DataFrameRow}[]
+    for r in eachrow(codes)
+        name = ismissing(r.name) ? "" : String(r.name)
+        contained = occursin(lv, lowercase(r.code_id)) || (!isempty(name) && occursin(lv, lowercase(name)))
+        score = contained ? 1.0 : max(fuzzy_match_score(value, r.code_id),
+                                      isempty(name) ? 0.0 : fuzzy_match_score(value, name))
+        push!(scored, (score, r))
+    end
+    sort!(scored; by=first, rev=true)
+    return Any[Dict{String, Any}("code" => r.code_id, "name" => jsonable(r.name), "score" => jsonable(s))
+               for (s, r) in Iterators.take(scored, 3) if s > 0.0]
+end
+
+"""
+    recodings(entry, chosen, data) -> Vector
+
+For every chosen mapping whose target has a codelist, the distinct source
+values that are not already code ids, each with up to three candidate codes.
+"""
+function recodings(entry::SchemaEntry, chosen::AdvancedMappingResult, data::DataFrame)
+    out = Any[]
+    entry.codelists === nothing && return out
+    for m in chosen.mappings
+        cl = codelist_for(entry, m.target_column)
+        cl === nothing && continue
+        codes = codes_for(entry, cl)
+        nrow(codes) == 0 && continue
+        ids = Set(String.(codes.code_id))
+        values = unique(String[string(v) for v in skipmissing(data[!, m.source_column])])
+        pending = String[v for v in values if !(v in ids)]
+        isempty(pending) && continue
+        entries = Any[Dict{String, Any}("source_value" => v, "candidates" => code_candidates(v, codes))
+                      for v in Iterators.take(pending, MAX_RECODE_VALUES)]
+        push!(out, Dict{String, Any}("target_column" => m.target_column, "source_column" => m.source_column,
+            "codelist_id" => cl, "values" => entries, "truncated" => length(pending) > MAX_RECODE_VALUES))
+    end
+    return out
+end
+
+"""
+    transformation_plan(session; source_id, schema_id, mappings=nothing)
+
+Turn the chosen mappings into ordered transformation steps, a loading snippet,
+a template skeleton, the recodings still to decide, and the contract a script
+must follow. `mappings` optionally overrides the inferred candidates as an
+object `{target_column: source_column}`. Runs `infer_mappings` with defaults
+if it has not run for this source yet.
+"""
+function transformation_plan(session::Session; source_id, schema_id, mappings=nothing)
+    src = get_source(session, source_id)
+    entry = get_schema(session, schema_id)
+    if src.last_mapping === nothing
+        infer_mappings(session; source_id=source_id, schema_id=schema_id)
+    end
+    overrides = Dict{String, String}()
+    if mappings !== nothing
+        mappings isa AbstractDict || throw(ToolError("mappings must be an object",
+            "Use the form {\"TARGET_COLUMN\": \"source column\"}."))
+        for (k, v) in pairs(mappings)
+            overrides[string(k)] = string(v)
+        end
+    end
+    chosen = choose_mappings(src.last_mapping, overrides, entry, src)
+    steps = build_transformation_steps(chosen, src.profile, entry.schema)
+    template = select_template(src.profile)
+    return Dict{String, Any}(
+        "source_id" => String(source_id), "schema_id" => String(schema_id),
+        "chosen_mappings" => Any[jsonable(m) for m in chosen.mappings],
+        "unmapped_target_columns" => chosen.unmapped_target_columns,
+        "unmapped_required_columns" => intersect(chosen.unmapped_target_columns, get_required_columns(entry.schema)),
+        "steps" => Any[jsonable(s) for s in steps],
+        "loading_code" => get_loading_code(src.profile),
+        "template" => Dict{String, Any}("name" => template.template_name, "description" => template.description,
+            "sections" => jsonable(template.template_sections), "example" => template.example_code),
+        "recodings" => recodings(entry, chosen, src.data),
+        "contract" => SCRIPT_CONTRACT)
+end
+
 end # module Tools

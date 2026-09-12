@@ -87,3 +87,38 @@ end
     bad = Tools.run_tool(session, Tools.infer_mappings, Dict("source_id" => sid, "schema_id" => schid, "method" => "llm"))
     @test occursin("heuristic", bad["hint"])
 end
+
+@testset "transformation_plan tool" begin
+    session = Tools.Session()
+    sid = Tools.run_tool(session, Tools.load_source, Dict("path" => DEMO_CSV))["source_id"]
+    schid = Tools.register_schema!(session, fixture_schema(), fixture_codelists(); origin="fixture")
+    plan = Tools.run_tool(session, Tools.transformation_plan, Dict("source_id" => sid, "schema_id" => schid))
+    @test !haskey(plan, "error")
+    @test plan["steps"][1]["operation_type"] == "read"
+    @test occursin("CSV.read", plan["loading_code"])
+    @test plan["template"]["name"] in ("simple_csv", "standard_transformation")
+    @test occursin("result", plan["contract"])
+    @test roundtrip(plan)["contract"] == plan["contract"]
+    # infer_mappings ran implicitly
+    @test Tools.get_source(session, sid).last_mapping isa AdvancedMappingResult
+
+    overridden = Tools.run_tool(session, Tools.transformation_plan,
+        Dict("source_id" => sid, "schema_id" => schid,
+             "mappings" => Dict("REF_AREA" => "Market", "VISITOR_TYPE" => "Visitor type",
+                                "TIME_PERIOD" => "Year", "OBS_VALUE" => "Visitors ('000)")))
+    @test !haskey(overridden, "error")
+    chosen_targets = Set(m["target_column"] for m in overridden["chosen_mappings"])
+    @test issubset(Set(["REF_AREA", "VISITOR_TYPE", "TIME_PERIOD", "OBS_VALUE"]), chosen_targets)
+    @test count(m -> m["target_column"] == "REF_AREA", overridden["chosen_mappings"]) == 1
+    rec = only(filter(r -> r["target_column"] == "VISITOR_TYPE", overridden["recodings"]))
+    ov = only(filter(v -> v["source_value"] == "Overnight visitors", rec["values"]))
+    @test ov["candidates"][1]["code"] == "OVN"
+    area = only(filter(r -> r["target_column"] == "REF_AREA", overridden["recodings"]))
+    @test any(v -> v["source_value"] == "USA", area["values"])
+    @test isempty(filter(r -> r["target_column"] == "TIME_PERIOD", overridden["recodings"]))
+    @test !("REF_AREA" in overridden["unmapped_required_columns"])
+
+    bad = Tools.run_tool(session, Tools.transformation_plan,
+        Dict("source_id" => sid, "schema_id" => schid, "mappings" => Dict("REF_AREA" => "Nope")))
+    @test occursin("Nope", bad["error"])
+end
