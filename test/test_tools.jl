@@ -122,3 +122,60 @@ end
         Dict("source_id" => sid, "schema_id" => schid, "mappings" => Dict("REF_AREA" => "Nope")))
     @test occursin("Nope", bad["error"])
 end
+
+const GOOD_SCRIPT = """
+area = Dict("China" => "CN", "Japan" => "JP", "USA" => "US")
+vtype = Dict("Overnight visitors" => "OVN", "Same-day visitors" => "SDV")
+result = DataFrame(
+    REF_AREA = [area[string(x)] for x in source[!, "Market"]],
+    COUNTERPART_AREA = fill("KR", nrow(source)),
+    VISITOR_TYPE = [vtype[string(x)] for x in source[!, "Visitor type"]],
+    MEASURE = fill("ARR", nrow(source)),
+    TIME_PERIOD = string.(source[!, "Year"]),
+    OBS_VALUE = Float64.(source[!, "Visitors ('000)"]) .* 1000,
+    UNIT_MEASURE = fill("PS", nrow(source)))
+"""
+
+@testset "run_script and validate_csv" begin
+    session = Tools.Session()
+    sid = Tools.run_tool(session, Tools.load_source, Dict("path" => DEMO_CSV))["source_id"]
+    schid = Tools.register_schema!(session, fixture_schema(), fixture_codelists(); origin="fixture")
+    outpath = joinpath(mktempdir(), "out.csv")
+    ok = Tools.run_tool(session, Tools.run_script,
+        Dict("source_id" => sid, "schema_id" => schid, "script" => GOOD_SCRIPT,
+             "output_path" => outpath, "preview_rows" => 3))
+    @test !haskey(ok, "error")
+    @test ok["result_rows"] == 10
+    @test length(ok["preview"]) == 3
+    @test ok["validation"]["compliance_status"] in ("compliant", "minor_issues", "major_issues", "non_compliant")
+    @test ok["validation"]["issues"] isa Vector
+    @test isfile(outpath)
+    @test roundtrip(ok)["result_rows"] == 10
+
+    throws = Tools.run_tool(session, Tools.run_script,
+        Dict("source_id" => sid, "schema_id" => schid, "script" => "x = 1\nerror(\"boom\")\nresult = source"))
+    @test occursin("boom", throws["error"])
+    @test occursin("line 2", throws["error"])
+
+    noresult = Tools.run_tool(session, Tools.run_script,
+        Dict("source_id" => sid, "schema_id" => schid, "script" => "x = source"))
+    @test occursin("result", noresult["error"])
+
+    notdf = Tools.run_tool(session, Tools.run_script,
+        Dict("source_id" => sid, "schema_id" => schid, "script" => "result = 42"))
+    @test occursin("DataFrame", notdf["error"])
+
+    parsefail = Tools.run_tool(session, Tools.run_script,
+        Dict("source_id" => sid, "schema_id" => schid, "script" => "result = DataFrame(("))
+    @test haskey(parsefail, "error")
+
+    # the sandbox works on a copy: the stored source is untouched
+    mutate = Tools.run_tool(session, Tools.run_script,
+        Dict("source_id" => sid, "schema_id" => schid, "script" => "select!(source, Not(\"Market\"))\nresult = source"))
+    @test !haskey(mutate, "error")
+    @test "Market" in names(Tools.get_source(session, sid).data)
+
+    vc = Tools.run_tool(session, Tools.validate_csv, Dict("path" => outpath, "schema_id" => schid))
+    @test vc["validation"]["compliance_status"] == ok["validation"]["compliance_status"]
+    @test vc["result_rows"] == 10
+end

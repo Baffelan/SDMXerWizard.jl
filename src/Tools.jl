@@ -576,4 +576,131 @@ function transformation_plan(session::Session; source_id, schema_id, mappings=no
         "contract" => SCRIPT_CONTRACT)
 end
 
+# ---------------------------------------------------------------- validation
+
+function jsonable(i::ValidationIssue)
+    return Dict{String, Any}(
+        "rule_id" => i.rule_id, "severity" => string(i.severity), "message" => i.message,
+        "location" => i.location, "affected_row_count" => length(i.affected_rows),
+        "affected_rows" => collect(Iterators.take(i.affected_rows, 10)),
+        "suggested_fix" => i.suggested_fix, "auto_fixable" => i.auto_fixable)
+end
+
+function jsonable(v::ValidationResult)
+    return Dict{String, Any}(
+        "dataset_name" => v.dataset_name, "compliance_status" => v.compliance_status,
+        "overall_score" => jsonable(v.overall_score), "total_rows" => v.total_rows,
+        "total_columns" => v.total_columns, "issues" => Any[jsonable(i) for i in v.issues],
+        "recommendations" => v.recommendations, "statistics" => jsonable(v.statistics))
+end
+
+function validation_report(schema::DataflowSchema, df::DataFrame, name::String, preview_rows::Integer)
+    validator = create_validator(schema)
+    vr = validate_sdmx_csv(validator, df, name)
+    return Dict{String, Any}("validation" => jsonable(vr), "preview" => rows(df, preview_rows),
+                             "result_rows" => nrow(df), "result_columns" => names(df))
+end
+
+# ---------------------------------------------------------------- sandbox
+
+const SANDBOX_MODULES = (DataFrames, CSV, Dates, SDMXer)
+
+function bind_module!(m::Module, pkg::Module)
+    Core.eval(m, Expr(:const, Expr(:(=), nameof(pkg), pkg)))
+    Core.eval(m, Expr(:using, Expr(:., :., nameof(pkg))))
+    return m
+end
+
+"""
+    sandbox_run(script, source) -> DataFrame
+
+Evaluate `script` in a fresh module with `source` bound to a copy of the
+DataFrame and DataFrames, CSV, Dates and SDMXer in scope. Returns the
+DataFrame the script assigned to `result`.
+"""
+function sandbox_run(script::String, source::DataFrame)
+    m = Module(:SDMXerScript)
+    for pkg in SANDBOX_MODULES
+        bind_module!(m, pkg)
+    end
+    Core.eval(m, Expr(:(=), :source, copy(source)))
+    parsed = try
+        Meta.parseall(script; filename="script.jl")
+    catch e
+        throw(ToolError("Script failed to parse: " * sprint(showerror, e), SCRIPT_CONTRACT))
+    end
+    line = 0
+    for ex in parsed.args
+        if ex isa LineNumberNode
+            line = ex.line
+            continue
+        end
+        if ex isa Expr && (ex.head == :error || ex.head == :incomplete)
+            throw(ToolError("Script failed to parse at line " * string(line) * ": " * string(ex.args[1]),
+                            SCRIPT_CONTRACT))
+        end
+        try
+            Core.eval(m, ex)
+        catch e
+            throw(ToolError("Script failed at line " * string(line) * ": " * sprint(showerror, e),
+                            SCRIPT_CONTRACT))
+        end
+    end
+    # Bindings created by eval live in a newer world than this function, so the
+    # lookups must run in the latest world (Julia 1.12 binding partitions).
+    Base.invokelatest(isdefined, m, :result) || throw(ToolError("The script did not define `result`", SCRIPT_CONTRACT))
+    result = Base.invokelatest(getfield, m, :result)
+    result isa DataFrame || throw(ToolError("`result` is a " * string(typeof(result)) * ", expected a DataFrame",
+                                            SCRIPT_CONTRACT))
+    return result
+end
+
+"""
+    run_script(session; source_id, schema_id, script, output_path=nothing, preview_rows=10)
+
+Evaluate a transformation script against a loaded source, validate the
+resulting DataFrame against the schema, and optionally write it as CSV.
+Script errors come back as an error dict with the failing line.
+"""
+function run_script(session::Session; source_id, schema_id, script, output_path=nothing, preview_rows=10)
+    src = get_source(session, source_id)
+    entry = get_schema(session, schema_id)
+    result = sandbox_run(String(script), src.data)
+    out = validation_report(entry.schema, result, basename(src.path), Int(preview_rows))
+    if output_path !== nothing && !isempty(string(output_path))
+        CSV.write(String(output_path), result)
+        out["output_path"] = String(output_path)
+    else
+        out["output_path"] = nothing
+    end
+    out["source_id"] = String(source_id)
+    out["schema_id"] = String(schema_id)
+    return out
+end
+
+# Dimension, time and attribute columns are codes and periods: keep them as
+# strings so "2015" or "01" survive the round trip through CSV.
+function read_sdmx_csv(path::String, schema::DataflowSchema)
+    coded = Set{String}(schema.dimensions.dimension_id)
+    schema.time_dimension === nothing || push!(coded, schema.time_dimension.dimension_id)
+    union!(coded, schema.attributes.attribute_id)
+    return CSV.read(path, DataFrame; types=(i, name) -> String(name) in coded ? String : nothing)
+end
+
+"""
+    validate_csv(session; path, schema_id, preview_rows=10)
+
+Validate an SDMx-CSV file produced elsewhere against a loaded schema.
+"""
+function validate_csv(session::Session; path, schema_id, preview_rows=10)
+    p = String(path)
+    isfile(p) || throw(ToolError("File not found: " * p, "Give the path of an existing CSV file."))
+    entry = get_schema(session, schema_id)
+    df = read_sdmx_csv(p, entry.schema)
+    out = validation_report(entry.schema, df, basename(p), Int(preview_rows))
+    out["path"] = p
+    out["schema_id"] = String(schema_id)
+    return out
+end
+
 end # module Tools
