@@ -200,4 +200,158 @@ function load_source(session::Session; path, sheet=1, header_row=1, anonymize=fa
     return out
 end
 
+# ---------------------------------------------------------------- schemas
+
+"""
+    register_schema!(session, schema, codelists; origin="") -> String
+
+Store a schema built elsewhere (tests, programmatic use) and return its handle.
+"""
+function register_schema!(session::Session, schema::DataflowSchema,
+                          codelists::Union{DataFrame, Nothing}; origin::String="")
+    id = next_handle!(session, "schema")
+    session.schemas[id] = SchemaEntry(schema, codelists, origin)
+    return id
+end
+
+"""
+    codelist_for(entry, column_id) -> Union{String, Nothing}
+
+The codelist id behind a dimension or attribute, or `nothing`.
+"""
+function codelist_for(entry::SchemaEntry, column_id::AbstractString)
+    schema = entry.schema
+    for row in eachrow(schema.dimensions)
+        if row.dimension_id == column_id
+            return ismissing(row.codelist_id) ? nothing : String(row.codelist_id)
+        end
+    end
+    for row in eachrow(schema.attributes)
+        if row.attribute_id == column_id
+            return ismissing(row.codelist_id) ? nothing : String(row.codelist_id)
+        end
+    end
+    return nothing
+end
+
+function codes_for(entry::SchemaEntry, codelist_id::AbstractString)
+    entry.codelists === nothing && return DataFrame()
+    return entry.codelists[entry.codelists.codelist_id .== codelist_id, :]
+end
+
+function field_or_nothing(nt, key::Symbol)
+    return hasproperty(nt, key) ? jsonable(getproperty(nt, key)) : nothing
+end
+
+"""
+    schema_summary(entry, id) -> Dict
+
+Compact description of a loaded schema: dimensions in order, the time
+dimension, attributes, measures, required and optional columns, and the size
+of each codelist. Codes themselves are never included.
+"""
+function schema_summary(entry::SchemaEntry, id::String)
+    schema = entry.schema
+    info = schema.dataflow_info
+    dims = Any[Dict{String, Any}(
+        "id" => r.dimension_id, "position" => r.position,
+        "codelist_id" => jsonable(r.codelist_id), "is_time_dimension" => r.is_time_dimension)
+        for r in eachrow(schema.dimensions)]
+    td = schema.time_dimension
+    time_dim = td === nothing ? nothing : Dict{String, Any}(
+        "id" => td.dimension_id, "position" => td.position, "data_type" => jsonable(td.data_type))
+    attrs = Any[Dict{String, Any}(
+        "id" => r.attribute_id, "assignment_status" => jsonable(r.assignment_status),
+        "relationship" => jsonable(r.relationship), "codelist_id" => jsonable(r.codelist_id))
+        for r in eachrow(schema.attributes)]
+    measures = Any[Dict{String, Any}("id" => r.measure_id, "data_type" => jsonable(r.data_type))
+        for r in eachrow(schema.measures)]
+    counts = Dict{String, Any}()
+    if entry.codelists !== nothing && nrow(entry.codelists) > 0
+        for g in groupby(entry.codelists, :codelist_id)
+            counts[String(first(g.codelist_id))] = nrow(g)
+        end
+    end
+    return Dict{String, Any}(
+        "schema_id" => id,
+        "origin" => entry.origin,
+        "dataflow" => Dict{String, Any}(
+            "id" => field_or_nothing(info, :id), "agency" => field_or_nothing(info, :agency),
+            "version" => field_or_nothing(info, :version), "name" => field_or_nothing(info, :name)),
+        "dimensions" => dims,
+        "time_dimension" => time_dim,
+        "attributes" => attrs,
+        "measures" => measures,
+        "required_columns" => get_required_columns(schema),
+        "optional_columns" => get_optional_columns(schema),
+        "codelists" => counts,
+        "codelists_loaded" => entry.codelists !== nothing)
+end
+
+"""
+    load_schema(session; url, with_codelists=true)
+
+Fetch a dataflow structure (URL or local SDMx-ML file), store it and return a
+summary. Codelists are fetched too unless `with_codelists` is false.
+"""
+function load_schema(session::Session; url, with_codelists=true)
+    u = String(url)
+    schema = extract_dataflow_schema(u)
+    codelists = nothing
+    if with_codelists
+        try
+            codelists = extract_all_codelists(u)
+        catch e
+            @warn "Codelists could not be fetched" url=u exception=e
+        end
+    end
+    id = register_schema!(session, schema, codelists; origin=u)
+    return schema_summary(session.schemas[id], id)
+end
+
+"""
+    lookup_codes(session; schema_id, dimension, query=nothing, limit=20)
+
+List or search the codes of the codelist behind a dimension or attribute.
+Without a query the first `limit` codes are returned; with one, codes whose id
+or name contain the text rank first, then fuzzy matches.
+"""
+function lookup_codes(session::Session; schema_id, dimension, query=nothing, limit=20)
+    entry = get_schema(session, schema_id)
+    dim = String(dimension)
+    cl = codelist_for(entry, dim)
+    cl === nothing && throw(ToolError("No codelist behind " * dim,
+        "Only dimensions and attributes with a codelist_id in the load_schema result can be looked up."))
+    entry.codelists === nothing && throw(ToolError("Schema " * string(schema_id) * " was loaded without codelists",
+        "Call load_schema again with with_codelists=true."))
+    codes = codes_for(entry, cl)
+    total = nrow(codes)
+    scored = Tuple{Float64, DataFrameRow}[]
+    if query === nothing || isempty(string(query))
+        for r in eachrow(codes)
+            push!(scored, (1.0, r))
+        end
+    else
+        q = lowercase(string(query))
+        for r in eachrow(codes)
+            name = ismissing(r.name) ? "" : String(r.name)
+            score = if occursin(q, lowercase(r.code_id)) || occursin(q, lowercase(name))
+                1.0
+            else
+                max(fuzzy_match_score(q, r.code_id), fuzzy_match_score(q, name))
+            end
+            score >= 0.3 && push!(scored, (score, r))
+        end
+        sort!(scored; by=first, rev=true)
+    end
+    lim = Int(limit)
+    kept = scored[1:min(lim, length(scored))]
+    matches = Any[Dict{String, Any}(
+        "code" => r.code_id, "name" => jsonable(r.name),
+        "parent" => hasproperty(r, :parent_code_id) ? jsonable(r.parent_code_id) : nothing,
+        "score" => jsonable(s)) for (s, r) in kept]
+    return Dict{String, Any}("dimension" => dim, "codelist_id" => cl, "total_codes" => total,
+                             "matches" => matches, "truncated" => length(scored) > lim)
+end
+
 end # module Tools
