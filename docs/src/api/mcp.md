@@ -4,11 +4,23 @@ SDMXerWizard exposes its capabilities to a language model through the Model
 Context Protocol. The server holds a session, the model calls tools that read
 from and write to that session, and every result is plain JSON.
 
-## Registering the server
+## Two servers, one flow
+
+Discovery belongs to the [SDMx MCP gateway](https://github.com/Baffelan/sdmx-mcp-gateway):
+finding a dataflow by keyword across a provider, inspecting its structure,
+browsing or searching the codes of a dimension, checking availability. It
+runs as a hosted service, so registering it costs one line. SDMXerWizard
+takes over once the dataflow is chosen: it loads the structure with its
+codelists, profiles the source, infers mappings, plans the transformation,
+runs the model's script and validates the result.
 
 ```json
 {
   "mcpServers": {
+    "sdmx-gateway": {
+      "type": "http",
+      "url": "https://sdmx-mcp-gateway-production.up.railway.app/mcp"
+    },
     "sdmxer-wizard": {
       "command": "julia",
       "args": ["--project=/path/to/SDMXerWizard.jl", "--startup-file=no",
@@ -18,6 +30,13 @@ from and write to that session, and every result is plain JSON.
 }
 ```
 
+The handoff is by identifier: `load_schema` accepts the `endpoint` key,
+`agency` and `dataflow_id` exactly as the gateway's `list_dataflows` reports
+them, and builds the structure URL from a provider table that mirrors the
+gateway's. A plain `url` still works for providers the table does not know.
+The gateway can also be self-hosted from its repository with `uv`; see its
+README.
+
 Cold start on a laptop-class machine is about four seconds once the package
 is precompiled. Logging and any stray print go to stderr; the protocol channel
 is a duplicate of the original stdout.
@@ -26,8 +45,7 @@ is a duplicate of the original stdout.
 
 | Tool | Arguments | Returns |
 | --- | --- | --- |
-| `load_schema` | `url`, `with_codelists` | `schema_id`, dataflow info, dimensions in order, time dimension, attributes, measures, required and optional columns, codelist sizes |
-| `lookup_codes` | `schema_id`, `dimension`, `query`, `limit` | matching codes with names and parents, total count, whether the list was truncated |
+| `load_schema` | `url`, or `endpoint` + `dataflow_id` (+ `agency`, `version`); `with_codelists` | `schema_id`, dataflow info, dimensions in order, time dimension, attributes, measures, required and optional columns, codelist sizes |
 | `load_source` | `path`, `sheet`, `header_row`, `anonymize` | `source_id`, row and column counts, per-column type, missing and unique counts, up to five sample values, suggested key, value and time columns |
 | `infer_mappings` | `source_id`, `schema_id`, `method`, `confidence_threshold` | candidates per target column with confidence, match type and evidence; unmapped source, target and required columns; warnings |
 | `transformation_plan` | `source_id`, `schema_id`, `mappings` | chosen mappings, ordered steps, loading snippet, template, recodings with candidate codes, the script contract |
@@ -37,7 +55,9 @@ is a duplicate of the original stdout.
 ## Session and handles
 
 `load_schema` and `load_source` return handles (`schema_1`, `source_2`) that
-later tools take as arguments. The session keeps the parsed schema with its
+later tools take as arguments. Code lookups are not needed here: the gateway's
+`get_dimension_codes` browses codes, and `transformation_plan` returns ranked
+candidate codes for every source value that still needs recoding. The session keeps the parsed schema with its
 codelists, the source DataFrame with its profile, and the last mapping result
 for each source, so nothing is fetched twice and large objects never pass
 through the model's context. Handles live as long as the server process.
@@ -80,7 +100,7 @@ SDMXerWizard.Tools.ToolError
 SDMXerWizard.Tools.run_tool
 SDMXerWizard.Tools.load_schema
 SDMXerWizard.Tools.register_schema!
-SDMXerWizard.Tools.lookup_codes
+SDMXerWizard.Tools.structure_url
 SDMXerWizard.Tools.load_source
 SDMXerWizard.Tools.infer_mappings
 SDMXerWizard.Tools.transformation_plan

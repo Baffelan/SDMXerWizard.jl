@@ -30,7 +30,7 @@ roundtrip(d) = JSON3.read(JSON3.write(d), Dict{String, Any})
     @test occursin("source_1", missing_handle["hint"])
 end
 
-@testset "Schema registration and code lookup" begin
+@testset "Schema registration and structure URLs" begin
     session = Tools.Session()
     id = Tools.register_schema!(session, fixture_schema(), fixture_codelists(); origin="fixture")
     @test id == "schema_1"
@@ -42,28 +42,24 @@ end
     @test summary["codelists"]["CL_AREA"] == 3
     @test summary["codelists_loaded"] == true
     @test roundtrip(summary)["schema_id"] == id
+    @test Tools.codelist_for(session.schemas[id], "UNIT_MEASURE") == "CL_UNIT"
+    @test Tools.codelist_for(session.schemas[id], "COUNTERPART_AREA") === nothing
+    @test nrow(Tools.codes_for(session.schemas[id], "CL_VISITOR_TYPE")) == 2
 
-    all_codes = Tools.run_tool(session, Tools.lookup_codes, Dict("schema_id" => id, "dimension" => "VISITOR_TYPE"))
-    @test all_codes["total_codes"] == 2
-    @test [m["code"] for m in all_codes["matches"]] == ["OVN", "SDV"]
-    @test all_codes["truncated"] == false
+    # Handoff from the SDMx MCP gateway: endpoint key plus dataflow id
+    @test Tools.structure_url("OECD", "DSD_TOURISM@DF_INBOUND"; agency="OECD.CFE.EDS") ==
+          "https://sdmx.oecd.org/public/rest/dataflow/OECD.CFE.EDS/DSD_TOURISM@DF_INBOUND/latest?references=all"
+    @test Tools.structure_url("spc", "DF_BP50") ==
+          "https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/latest?references=all"
+    @test Tools.structure_url("IMF", "CPI"; version="3.0") ==
+          "https://api.imf.org/external/sdmx/2.1/dataflow/IMF.STA/CPI/3.0?references=all"
+    @test_throws Tools.ToolError Tools.structure_url("NOPE", "DF_X")
 
-    hit = Tools.run_tool(session, Tools.lookup_codes, Dict("schema_id" => id, "dimension" => "REF_AREA", "query" => "japan"))
-    @test hit["matches"][1]["code"] == "JP"
-
-    attr = Tools.run_tool(session, Tools.lookup_codes, Dict("schema_id" => id, "dimension" => "UNIT_MEASURE"))
-    @test attr["codelist_id"] == "CL_UNIT"
-
-    none = Tools.run_tool(session, Tools.lookup_codes, Dict("schema_id" => id, "dimension" => "COUNTERPART_AREA"))
-    @test haskey(none, "error")
-
-    limited = Tools.run_tool(session, Tools.lookup_codes, Dict("schema_id" => id, "dimension" => "REF_AREA", "limit" => 1))
-    @test length(limited["matches"]) == 1
-    @test limited["truncated"] == true
-
-    nocl = Tools.register_schema!(session, fixture_schema(), nothing; origin="fixture-nocodes")
-    without = Tools.run_tool(session, Tools.lookup_codes, Dict("schema_id" => nocl, "dimension" => "REF_AREA"))
-    @test occursin("with_codelists", without["hint"])
+    neither = Tools.run_tool(session, Tools.load_schema, Dict{String, Any}())
+    @test occursin("url", neither["error"])
+    unknown = Tools.run_tool(session, Tools.load_schema, Dict("endpoint" => "NOPE", "dataflow_id" => "DF_X"))
+    @test occursin("SPC", unknown["hint"])
+    @test occursin("OECD", unknown["hint"])
 end
 
 @testset "infer_mappings tool" begin
@@ -184,7 +180,7 @@ end
 @testset "MCP wiring" begin
     session = Tools.Session()
     tools = SDMXerWizard.mcp_tools(session)
-    @test Set(t.name for t in tools) == Set(["load_schema", "lookup_codes", "load_source", "infer_mappings",
+    @test Set(t.name for t in tools) == Set(["load_schema", "load_source", "infer_mappings",
                                              "transformation_plan", "run_script", "validate_csv"])
     for t in tools
         @test t.input_schema["type"] == "object"
@@ -217,7 +213,7 @@ end
     println(proc, JSON3.write(Dict("jsonrpc" => "2.0", "method" => "notifications/initialized"))); flush(proc)
     println(proc, JSON3.write(Dict("jsonrpc" => "2.0", "id" => 2, "method" => "tools/list"))); flush(proc)
     listing = JSON3.read(readline(proc), Dict{String, Any})
-    @test length(listing["result"]["tools"]) == 7
+    @test length(listing["result"]["tools"]) == 6
     call = Dict("jsonrpc" => "2.0", "id" => 3, "method" => "tools/call",
         "params" => Dict("name" => "load_source", "arguments" => Dict("path" => DEMO_CSV)))
     println(proc, JSON3.write(call)); flush(proc)

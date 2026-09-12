@@ -19,12 +19,16 @@ package supplies the facts and checks the outcome.
 
 **Tools** (`SDMXerWizard.Tools`, returns JSON-friendly Dicts)
     Session  ─→  handles for loaded schemas and sources
-    load_schema, lookup_codes, load_source, infer_mappings,
+    load_schema, load_source, infer_mappings,
     transformation_plan, run_script, validate_csv
 
 **MCP server**
     serve_mcp()  ─→  stdio Model Context Protocol server over a Session
     mcp_tools(session)  ─→  the same tools as MCPTool values
+
+Dataflow discovery and code browsing are left to the SDMx MCP gateway
+(https://github.com/Baffelan/sdmx-mcp-gateway), registered alongside this
+server; `load_schema` accepts the endpoint and dataflow id it reports.
 
 See also: `SDMXer` (SDMX.jl) for core SDMx parsing, validation, and joins.
 """

@@ -10,10 +10,13 @@ using ModelContextProtocol
 
 const SERVER_INSTRUCTIONS = """
 SDMXerWizard maps a source data file (CSV or Excel) to an SDMx dataflow and validates the result. \
-Typical order: load_schema, load_source, infer_mappings, lookup_codes as needed, transformation_plan, \
-then write a Julia script that follows the returned contract and submit it with run_script. \
-Iterate on the script until the validation report is compliant. Handles such as schema_1 and source_1 \
-refer to objects held in this server's session; they do not survive a restart."""
+Discovery is the job of the sdmx-gateway server when it is available: use its list_dataflows to find \
+the dataflow, get_dataflow_structure to inspect it, and get_dimension_codes to browse or search codes. \
+Then, here: load_schema (with the endpoint, agency and dataflow id the gateway reported, or a URL), \
+load_source, infer_mappings, transformation_plan, and finally write a Julia script that follows the \
+returned contract and submit it with run_script. Iterate on the script until the validation report is \
+compliant. Handles such as schema_1 and source_1 refer to objects held in this server's session; they \
+do not survive a restart."""
 
 function prop(type::String, description::String; extra...)
     d = Dict{String, Any}("type" => type, "description" => description)
@@ -30,17 +33,14 @@ end
 
 const TOOL_SPECS = [
     (name = "load_schema", fn = Tools.load_schema,
-     description = "Fetch an SDMx dataflow structure from a .Stat URL or a local SDMx-ML file and store it in the session. Returns schema_id, dimensions in order, attributes, measures, required columns and codelist sizes.",
-     schema = object_schema(["url" => prop("string", "Dataflow URL (for example a .Stat Data Explorer developer API link with references=all) or path to a structure XML file"),
-                             "with_codelists" => prop("boolean", "Also fetch the codelists so lookup_codes and value matching work"; default = true)],
-                            ["url"])),
-    (name = "lookup_codes", fn = Tools.lookup_codes,
-     description = "List or search the codes behind a dimension or attribute of a loaded schema.",
-     schema = object_schema(["schema_id" => prop("string", "Handle returned by load_schema"),
-                             "dimension" => prop("string", "Dimension or attribute id, for example REF_AREA"),
-                             "query" => prop("string", "Optional case-insensitive text matched against code ids and names"),
-                             "limit" => prop("integer", "Maximum number of codes to return"; default = 20)],
-                            ["schema_id", "dimension"])),
+     description = "Fetch an SDMx dataflow structure and store it in the session. Give either url, or endpoint plus dataflow_id (and agency for providers such as OECD that publish under sub-agencies) as reported by the sdmx-gateway tools. Returns schema_id, dimensions in order, attributes, measures, required columns and codelist sizes.",
+     schema = object_schema(["url" => prop("string", "Dataflow structure URL (for example a .Stat Data Explorer developer API link with references=all) or path to a structure XML file"),
+                             "endpoint" => prop("string", "Provider key as used by the sdmx-gateway server"; enum = sort(collect(keys(Tools.PROVIDERS)))),
+                             "dataflow_id" => prop("string", "Dataflow id on that provider, for example DF_BP50 or DSD_TOURISM@DF_INBOUND"),
+                             "agency" => prop("string", "Agency owning the dataflow; defaults to the provider's own agency"),
+                             "version" => prop("string", "Dataflow version"; default = "latest"),
+                             "with_codelists" => prop("boolean", "Also fetch the codelists so value matching and recodings work"; default = true)],
+                            String[])),
     (name = "load_source", fn = Tools.load_source,
      description = "Read a CSV or Excel file, profile its columns and store it in the session. Returns source_id and a compact column profile with a few sample values per column.",
      schema = object_schema(["path" => prop("string", "Absolute path to a .csv, .xlsx or .xls file"),

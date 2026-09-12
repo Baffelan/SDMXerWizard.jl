@@ -288,14 +288,59 @@ function schema_summary(entry::SchemaEntry, id::String)
         "codelists_loaded" => entry.codelists !== nothing)
 end
 
-"""
-    load_schema(session; url, with_codelists=true)
+# SDMx REST providers, keyed like the SDMx MCP gateway
+# (https://github.com/Baffelan/sdmx-mcp-gateway) so ids read off its results
+# pass straight through. `agency` is the default owner of dataflows there.
+const PROVIDERS = Dict{String, NamedTuple{(:base_url, :agency), Tuple{String, String}}}(
+    "SPC" => (base_url = "https://stats-sdmx-disseminate.pacificdata.org/rest", agency = "SPC"),
+    "FBOS" => (base_url = "https://data-sdmx-disseminate.statsfiji.gov.fj/rest", agency = "FBOS"),
+    "SBS" => (base_url = "https://data-sdmx-disseminate.sbs.gov.ws/rest", agency = "SBS"),
+    "ECB" => (base_url = "https://data-api.ecb.europa.eu/service", agency = "ECB"),
+    "UNICEF" => (base_url = "https://sdmx.data.unicef.org/ws/public/sdmxapi/rest", agency = "UNICEF"),
+    "IMF" => (base_url = "https://api.imf.org/external/sdmx/2.1", agency = "IMF.STA"),
+    "OECD" => (base_url = "https://sdmx.oecd.org/public/rest", agency = "OECD"),
+    "ESTAT" => (base_url = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1", agency = "ESTAT"),
+    "ILO" => (base_url = "https://sdmx.ilo.org/rest", agency = "ILO"),
+    "ABS" => (base_url = "https://data.api.abs.gov.au/rest", agency = "ABS"),
+    "BIS" => (base_url = "https://stats.bis.org/api/v1", agency = "BIS"),
+    "STATSNZ" => (base_url = "https://api.data.stats.govt.nz/rest", agency = "STATSNZ"))
 
-Fetch a dataflow structure (URL or local SDMx-ML file), store it and return a
-summary. Codelists are fetched too unless `with_codelists` is false.
 """
-function load_schema(session::Session; url, with_codelists=true)
-    u = String(url)
+    structure_url(endpoint, dataflow_id; agency=nothing, version="latest") -> String
+
+The structure URL (`references=all`) of a dataflow on one of the known
+providers. `agency` defaults to the provider's own agency id; OECD dataflows
+live under sub-agencies, so pass the agency the gateway reports.
+"""
+function structure_url(endpoint, dataflow_id; agency=nothing, version="latest")
+    key = uppercase(strip(string(endpoint)))
+    haskey(PROVIDERS, key) || throw(ToolError("Unknown endpoint " * key,
+        "Known endpoints: " * join(sort(collect(keys(PROVIDERS))), ", ") * ". Pass url instead for any other provider."))
+    p = PROVIDERS[key]
+    ag = agency === nothing || isempty(string(agency)) ? p.agency : string(agency)
+    ver = version === nothing || isempty(string(version)) ? "latest" : string(version)
+    return p.base_url * "/dataflow/" * ag * "/" * string(dataflow_id) * "/" * ver * "?references=all"
+end
+
+"""
+    load_schema(session; url=nothing, endpoint=nothing, dataflow_id=nothing, agency=nothing,
+                version="latest", with_codelists=true)
+
+Fetch a dataflow structure, store it and return a summary. Give either a
+`url` (a .Stat developer API link, or a local SDMx-ML file) or an `endpoint`
+key plus `dataflow_id` as reported by the SDMx MCP gateway. Codelists are
+fetched too unless `with_codelists` is false.
+"""
+function load_schema(session::Session; url=nothing, endpoint=nothing, dataflow_id=nothing,
+                     agency=nothing, version="latest", with_codelists=true)
+    u = if url !== nothing && !isempty(string(url))
+        string(url)
+    elseif endpoint !== nothing && dataflow_id !== nothing
+        structure_url(endpoint, dataflow_id; agency=agency, version=version)
+    else
+        throw(ToolError("Give either url, or endpoint and dataflow_id",
+            "Use list_dataflows on the sdmx-gateway server to find the dataflow, then pass its endpoint, agency and id here."))
+    end
     schema = extract_dataflow_schema(u)
     codelists = nothing
     if with_codelists
@@ -309,50 +354,6 @@ function load_schema(session::Session; url, with_codelists=true)
     return schema_summary(session.schemas[id], id)
 end
 
-"""
-    lookup_codes(session; schema_id, dimension, query=nothing, limit=20)
-
-List or search the codes of the codelist behind a dimension or attribute.
-Without a query the first `limit` codes are returned; with one, codes whose id
-or name contain the text rank first, then fuzzy matches.
-"""
-function lookup_codes(session::Session; schema_id, dimension, query=nothing, limit=20)
-    entry = get_schema(session, schema_id)
-    dim = String(dimension)
-    cl = codelist_for(entry, dim)
-    cl === nothing && throw(ToolError("No codelist behind " * dim,
-        "Only dimensions and attributes with a codelist_id in the load_schema result can be looked up."))
-    entry.codelists === nothing && throw(ToolError("Schema " * string(schema_id) * " was loaded without codelists",
-        "Call load_schema again with with_codelists=true."))
-    codes = codes_for(entry, cl)
-    total = nrow(codes)
-    scored = Tuple{Float64, DataFrameRow}[]
-    if query === nothing || isempty(string(query))
-        for r in eachrow(codes)
-            push!(scored, (1.0, r))
-        end
-    else
-        q = lowercase(string(query))
-        for r in eachrow(codes)
-            name = ismissing(r.name) ? "" : String(r.name)
-            score = if occursin(q, lowercase(r.code_id)) || occursin(q, lowercase(name))
-                1.0
-            else
-                max(fuzzy_match_score(q, r.code_id), fuzzy_match_score(q, name))
-            end
-            score >= 0.3 && push!(scored, (score, r))
-        end
-        sort!(scored; by=first, rev=true)
-    end
-    lim = Int(limit)
-    kept = scored[1:min(lim, length(scored))]
-    matches = Any[Dict{String, Any}(
-        "code" => r.code_id, "name" => jsonable(r.name),
-        "parent" => hasproperty(r, :parent_code_id) ? jsonable(r.parent_code_id) : nothing,
-        "score" => jsonable(s)) for (s, r) in kept]
-    return Dict{String, Any}("dimension" => dim, "codelist_id" => cl, "total_codes" => total,
-                             "matches" => matches, "truncated" => length(scored) > lim)
-end
 
 # ---------------------------------------------------------------- mappings
 

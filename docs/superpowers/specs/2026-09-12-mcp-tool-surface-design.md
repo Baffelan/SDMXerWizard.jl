@@ -297,3 +297,21 @@ CSV is added in the same branch.
 removed from `make.jl` and deleted; `mcp.md` is added. The README requirements,
 features and quick start sections are rewritten for the new philosophy: the
 library gives the model eyes and a checker, and the model writes the code.
+
+## Amendment, 2026-09-12: discovery delegated to the SDMx MCP gateway
+
+Approved after the first implementation. The hosted
+[SDMx MCP gateway](https://github.com/Baffelan/sdmx-mcp-gateway) is
+registered alongside this server in `.mcp.json` (HTTP transport, nothing to
+install). It owns dataflow discovery, structure inspection, code browsing and
+availability. Consequences for this package:
+
+- `lookup_codes` is removed; the gateway's `get_dimension_codes` replaces it
+  and `transformation_plan` still returns candidate codes for recodings.
+- `load_schema` accepts `endpoint`, `dataflow_id`, `agency` and `version` as
+  reported by the gateway, in addition to `url`. A provider table in `Tools`
+  (`PROVIDERS`, keyed like the gateway's endpoints) builds the structure URL.
+- The server instructions send discovery to the gateway and keep loading,
+  mapping, planning, running and validating here.
+- Six tools remain: `load_schema`, `load_source`, `infer_mappings`,
+  `transformation_plan`, `run_script`, `validate_csv`.

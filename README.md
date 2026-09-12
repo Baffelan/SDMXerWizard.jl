@@ -38,12 +38,20 @@ Pkg.add(url="https://github.com/Baffelan/SDMXerWizard.jl")
 
 ## Using it from Claude Code
 
-Register the server in a `.mcp.json` at the root of the project you work in,
-adjusting the project path:
+Two servers share the work. The hosted
+[SDMx MCP gateway](https://github.com/Baffelan/sdmx-mcp-gateway) handles
+discovery: finding dataflows by keyword, inspecting structures, browsing
+codes, checking availability. SDMXerWizard handles the transformation once a
+dataflow is chosen. Register both in a `.mcp.json` at the root of the project
+you work in, adjusting the project path:
 
 ```json
 {
   "mcpServers": {
+    "sdmx-gateway": {
+      "type": "http",
+      "url": "https://sdmx-mcp-gateway-production.up.railway.app/mcp"
+    },
     "sdmxer-wizard": {
       "command": "julia",
       "args": ["--project=/path/to/SDMXerWizard.jl", "--startup-file=no",
@@ -53,12 +61,11 @@ adjusting the project path:
 }
 ```
 
-Claude Code then discovers seven tools:
+SDMXerWizard contributes six tools:
 
 | Tool | What it does |
 | --- | --- |
-| `load_schema` | Fetch a dataflow structure from a .Stat URL or a local SDMx-ML file; returns a `schema_id` and a summary |
-| `lookup_codes` | List or search the codes behind a dimension or attribute |
+| `load_schema` | Fetch a dataflow structure by URL, or by the endpoint and dataflow id the gateway reports; returns a `schema_id` and a summary |
 | `load_source` | Read and profile a CSV or Excel file; returns a `source_id` and a compact column profile |
 | `infer_mappings` | Rank source columns against target columns, with confidence and evidence |
 | `transformation_plan` | Ordered steps, a template, the recodings still to decide, and the contract a script must follow |
@@ -79,7 +86,7 @@ The same functions work without MCP. Each takes a `Session` and returns a
 using SDMXerWizard
 
 session = Tools.Session()
-schema = Tools.load_schema(session; url = "https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/latest?references=all")
+schema = Tools.load_schema(session; endpoint = "SPC", dataflow_id = "DF_BP50")
 source = Tools.load_source(session; path = "my_data.csv")
 mappings = Tools.infer_mappings(session; source_id = source["source_id"], schema_id = schema["schema_id"])
 plan = Tools.transformation_plan(session; source_id = source["source_id"], schema_id = schema["schema_id"],

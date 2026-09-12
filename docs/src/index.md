@@ -27,7 +27,7 @@ SDMXerWizard depends on [SDMXer.jl](https://github.com/Baffelan/SDMXer.jl) for S
 using SDMXerWizard
 
 session = Tools.Session()
-schema = Tools.load_schema(session; url = "https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/latest?references=all")
+schema = Tools.load_schema(session; endpoint = "SPC", dataflow_id = "DF_BP50")
 source = Tools.load_source(session; path = "my_data.csv")
 mappings = Tools.infer_mappings(session; source_id = source["source_id"], schema_id = schema["schema_id"])
 ```

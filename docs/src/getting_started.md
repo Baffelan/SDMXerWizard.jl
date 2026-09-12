@@ -7,11 +7,17 @@ Julia directly. Both paths use the same `Tools` functions and the same core.
 
 ## From Claude Code
 
-Add a `.mcp.json` to the project you work in:
+Add a `.mcp.json` to the project you work in. The first entry is the hosted
+SDMx MCP gateway, which finds dataflows and browses codes; the second is this
+package.
 
 ```json
 {
   "mcpServers": {
+    "sdmx-gateway": {
+      "type": "http",
+      "url": "https://sdmx-mcp-gateway-production.up.railway.app/mcp"
+    },
     "sdmxer-wizard": {
       "command": "julia",
       "args": ["--project=/path/to/SDMXerWizard.jl", "--startup-file=no",
@@ -21,9 +27,10 @@ Add a `.mcp.json` to the project you work in:
 }
 ```
 
-Then ask, in order: load the dataflow, load the file, infer mappings, look up
-codes where the mapping is unsure, plan the transformation, write and run the
-script until it validates. The [MCP Tools](@ref) page lists what each tool
+Then ask, in order: find the dataflow (gateway), load it here by endpoint and
+id, load the file, infer mappings, browse codes where the mapping is unsure
+(gateway), plan the transformation, write and run the script until it
+validates. The [MCP Tools](@ref) page lists what each tool
 returns.
 
 ## From Julia
@@ -34,8 +41,7 @@ returns.
 using SDMXerWizard
 
 session = Tools.Session()
-schema = Tools.load_schema(session;
-    url = "https://stats-sdmx-disseminate.pacificdata.org/rest/dataflow/SPC/DF_BP50/latest?references=all")
+schema = Tools.load_schema(session; endpoint = "SPC", dataflow_id = "DF_BP50")
 schema["required_columns"]
 ```
 

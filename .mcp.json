@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "sdmx-gateway": {
+      "type": "http",
+      "url": "https://sdmx-mcp-gateway-production.up.railway.app/mcp"
+    },
     "sdmxer-wizard": {
       "command": "julia",
       "args": [
