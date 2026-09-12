@@ -31,8 +31,7 @@ Constraints agreed with the author:
 Three layers, each usable without the one above it:
 
 1. **Core** (existing, trimmed): data sources, profiling, anonymisation,
-   mapping inference, metadata context, script templates and the
-   transformation step builder. Pure Julia, returns Julia structs.
+   mapping inference, script templates and the transformation step builder. Pure Julia, returns Julia structs.
 2. **`SDMXerWizard.Tools`** (new, `src/Tools.jl`): a `Session` and seven
    functions that take a session plus plain arguments and return
    `Dict{String,Any}` values containing only strings, numbers, booleans,
@@ -221,8 +220,9 @@ Compat `julia = "1.12"`. Version 0.2.0.
 
 Source files removed: `SDMXPromptingIntegration.jl`, `SDMXPromptGeneration.jl`,
 `SDMXCrossDataflowLLM.jl`, `SDMXJoinPrompts.jl`, `SDMXLLMPipelineOps.jl`,
-`SDMXEnhancedTransformation.jl`, `SDMXWorkflow.jl`. `SDMXJoinWorkflow.jl` is
-kept if it loads without the removed files and removed otherwise.
+`SDMXEnhancedTransformation.jl`, `SDMXWorkflow.jl`, `SDMXJoinWorkflow.jl` (it
+calls the LLM join script generator) and `SDMXMetadataContext.jl` (it exists
+only to build prompt context and calls an undefined Excel analysis function).
 
 `SDMXScriptGeneration.jl` is trimmed: `ScriptGenerator`, `create_script_generator`,
 `generate_transformation_script`, `generate_transformation_script_text`,
