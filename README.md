@@ -61,7 +61,7 @@ you work in, adjusting the project path:
 }
 ```
 
-SDMXerWizard contributes six tools:
+SDMXerWizard contributes seven tools and one guided prompt:
 
 | Tool | What it does |
 | --- | --- |
@@ -71,6 +71,13 @@ SDMXerWizard contributes six tools:
 | `transformation_plan` | Ordered steps, a template, the recodings still to decide, and the contract a script must follow |
 | `run_script` | Evaluate the model's Julia script against the loaded source and validate the result |
 | `validate_csv` | Validate an SDMx-CSV file produced elsewhere |
+| `compare_with_published` | Fetch what the provider already publishes and compare it with the result row by row |
+
+The prompt `map_to_sdmx` (in Claude Code, `/mcp__sdmxer-wizard__map_to_sdmx`)
+runs the whole flow from a file path and a few keywords. Read-only tools are
+annotated as such; `run_script` is marked destructive so the client shows the
+script before executing it. A project skill in `.claude/skills/sdmx-mapping`
+gives Claude Code the contract and the recurring validation pitfalls.
 
 Handles such as `schema_1` and `source_1` refer to objects held in the server
 session, so later calls never re-fetch a dataflow or pass large objects

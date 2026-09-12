@@ -51,6 +51,21 @@ is a duplicate of the original stdout.
 | `transformation_plan` | `source_id`, `schema_id`, `mappings` | chosen mappings, ordered steps, loading snippet, template, recodings with candidate codes, the script contract |
 | `run_script` | `source_id`, `schema_id`, `script`, `output_path`, `preview_rows` | validation report, preview rows, result size, written path |
 | `validate_csv` | `path`, `schema_id`, `preview_rows` | validation report and preview for an existing file |
+| `compare_with_published` | `source_id`, `schema_id`, `data_url` or `filters`, `start_period`, `end_period` | rows matched, only on either side, exact and near agreement of OBS_VALUE, a sample of disagreements |
+
+Every tool carries annotations: all are marked read-only except `run_script`,
+which is marked destructive because it executes model-written code and may
+write a file. Clients that honour the hints approve the read-only tools
+silently and show the script before running it.
+
+## The guided prompt
+
+The server publishes one prompt, `map_to_sdmx`, with arguments `file`,
+`keywords`, and optional `endpoint` and `output`. Claude Code exposes it as
+the slash command `/mcp__sdmxer-wizard__map_to_sdmx`. It walks the model
+through discovery on the gateway, loading, profiling, mapping, code lookup,
+planning, writing and running the script until it validates, and the
+comparison with published data.
 
 ## Session and handles
 
@@ -106,6 +121,9 @@ SDMXerWizard.Tools.infer_mappings
 SDMXerWizard.Tools.transformation_plan
 SDMXerWizard.Tools.run_script
 SDMXerWizard.Tools.validate_csv
+SDMXerWizard.Tools.compare_with_published
+SDMXerWizard.Tools.compare_frames
 SDMXerWizard.mcp_tools
+SDMXerWizard.mcp_prompts
 SDMXerWizard.serve_mcp
 ```

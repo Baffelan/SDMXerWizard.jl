@@ -315,3 +315,21 @@ availability. Consequences for this package:
   mapping, planning, running and validating here.
 - Six tools remain: `load_schema`, `load_source`, `infer_mappings`,
   `transformation_plan`, `run_script`, `validate_csv`.
+
+## Amendment, 2026-09-12: prompt, annotations, cross-check, skill
+
+- A `map_to_sdmx` MCP prompt guides the whole flow; Claude Code exposes it as
+  a slash command.
+- Tool annotations: every tool read-only except `run_script`, marked
+  destructive; `load_schema` and `compare_with_published` are open-world.
+- A seventh tool, `compare_with_published`, fetches the provider's published
+  data (by `data_url` from the gateway or by `filters` through SDMXer's
+  `construct_data_url`) and compares it with the last `run_script` result
+  on the shared dimension and time columns.
+- `SourceEntry` keeps `last_result` for that comparison.
+- A project skill at `.claude/skills/sdmx-mapping/SKILL.md` gives Claude Code
+  the two-server flow, the contract and recurring validation pitfalls.
+- Elicitation before `run_script` was considered and not built: the client's
+  own approval dialog, driven by the destructive annotation, already shows
+  the script before it runs, and the server-initiated elicitation path is
+  not yet established for the clients in use.

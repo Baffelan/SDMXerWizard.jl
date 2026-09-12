@@ -20,7 +20,7 @@ package supplies the facts and checks the outcome.
 **Tools** (`SDMXerWizard.Tools`, returns JSON-friendly Dicts)
     Session  ─→  handles for loaded schemas and sources
     load_schema, load_source, infer_mappings,
-    transformation_plan, run_script, validate_csv
+    transformation_plan, run_script, validate_csv, compare_with_published
 
 **MCP server**
     serve_mcp()  ─→  stdio Model Context Protocol server over a Session
@@ -47,7 +47,7 @@ include("Tools.jl")
 include("MCPServer.jl")
 
 # === TOOL SURFACE ===
-export Tools, serve_mcp, mcp_tools
+export Tools, serve_mcp, mcp_tools, mcp_prompts
 
 # === RE-EXPORTED FROM SDMXer ===
 export DataflowSchema, extract_dataflow_schema, extract_all_codelists

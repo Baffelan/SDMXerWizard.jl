@@ -9,6 +9,13 @@ The file `inbound_visitors.csv` is a small tourism-style table: source market,
 visitor type, year, and visitors in thousands. It stands in for the kind of
 spreadsheet a national statistics office receives.
 
+## The short version
+
+Type `/mcp__sdmxer-wizard__map_to_sdmx` with the file path and the keywords
+"inbound tourism", and the model runs every step below on its own, pausing
+only if several dataflows match. Use the long version when you want to
+narrate each call.
+
 ## Prompts, in order
 
 0. **"Find the OECD dataflow about inbound tourism"**
@@ -49,6 +56,13 @@ spreadsheet a national statistics office receives.
 
 7. **"Write the result to out/inbound.csv and validate the file"**
    Expected calls: `run_script` with `output_path`, then `validate_csv`.
+
+8. **"Compare it with what OECD publishes for Korea in 2015 and 2016"**
+   Expected call: `compare_with_published` with filters on the reference
+   area and the two periods, or with a data URL from the gateway's
+   `build_data_url`. The demo file is synthetic, so expect disagreements;
+   the point is that the tool reports coverage and agreement row by row,
+   and with a real file it would confirm the series.
 
 ## What to say
 

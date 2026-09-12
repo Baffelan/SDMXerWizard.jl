@@ -19,8 +19,8 @@ using ..SDMXerWizard: SourceDataProfile, ColumnProfile, MappingCandidate, Mappin
     fuzzy_match_score, build_transformation_steps, get_loading_code, select_template
 import SDMXer
 using SDMXer: DataflowSchema, extract_dataflow_schema, extract_all_codelists,
-    get_required_columns, get_optional_columns, create_validator, validate_sdmx_csv,
-    ValidationResult, ValidationIssue
+    get_required_columns, get_optional_columns, get_dimension_order, create_validator, validate_sdmx_csv,
+    ValidationResult, ValidationIssue, construct_data_url, fetch_sdmx_data
 using DataFrames, CSV, JSON3, Dates
 
 # ---------------------------------------------------------------- session
@@ -36,6 +36,7 @@ mutable struct SourceEntry
     profile::SourceDataProfile
     path::String
     last_mapping::Union{AdvancedMappingResult, Nothing}
+    last_result::Union{DataFrame, Nothing}
 end
 
 """
@@ -193,7 +194,7 @@ function load_source(session::Session; path, sheet=1, header_row=1, anonymize=fa
         profile = profile_source_data(df, p)
     end
     id = next_handle!(session, "source")
-    session.sources[id] = SourceEntry(df, profile, p, nothing)
+    session.sources[id] = SourceEntry(df, profile, p, nothing, nothing)
     out = jsonable(profile)
     out["source_id"] = id
     out["anonymized"] = Bool(anonymize)
@@ -667,6 +668,7 @@ function run_script(session::Session; source_id, schema_id, script, output_path=
     src = get_source(session, source_id)
     entry = get_schema(session, schema_id)
     result = sandbox_run(String(script), src.data)
+    src.last_result = result
     out = validation_report(entry.schema, result, basename(src.path), Int(preview_rows))
     if output_path !== nothing && !isempty(string(output_path))
         CSV.write(String(output_path), result)
@@ -700,6 +702,129 @@ function validate_csv(session::Session; path, schema_id, preview_rows=10)
     df = read_sdmx_csv(p, entry.schema)
     out = validation_report(entry.schema, df, basename(p), Int(preview_rows))
     out["path"] = p
+    out["schema_id"] = String(schema_id)
+    return out
+end
+
+# ---------------------------------------------------------------- cross-check
+
+# base URL, agency, dataflow id and version from a structure URL such as
+# https://host/rest/dataflow/AGENCY/DF_ID/latest?references=all
+function parse_structure_url(origin::String)
+    m = match(r"^(.*?)/dataflow/([^/]+)/([^/]+)/([^/?]+)", origin)
+    m === nothing && throw(ToolError("Cannot derive a data URL from " * origin,
+        "The schema must come from a dataflow URL, or pass data_url built with the gateway's build_data_url."))
+    return (base_url = String(m.captures[1]), agency = String(m.captures[2]),
+            dataflow_id = String(m.captures[3]), version = String(m.captures[4]))
+end
+
+const MAX_MISMATCH_SAMPLES = 10
+const MAX_KEY_SAMPLES = 5
+
+as_float(x) = x === missing ? nothing : (x isa Number ? Float64(x) : tryparse(Float64, string(x)))
+
+"""
+    compare_frames(schema, ours, published) -> Dict
+
+Row-by-row comparison of a transformed result with a published dataset on the
+dimension and time columns they share: coverage on both sides and OBS_VALUE
+agreement where the keys match.
+"""
+function compare_frames(schema::DataflowSchema, ours::DataFrame, published::DataFrame)
+    key_cols = String[]
+    for c in get_dimension_order(schema)
+        c in names(ours) && c in names(published) && push!(key_cols, String(c))
+    end
+    td = schema.time_dimension
+    if td !== nothing && td.dimension_id in names(ours) && td.dimension_id in names(published)
+        push!(key_cols, String(td.dimension_id))
+    end
+    isempty(key_cols) && throw(ToolError("No dimension columns in common between the result and the published data",
+        "The result must use the schema's dimension ids as column names."))
+    ("OBS_VALUE" in names(ours) && "OBS_VALUE" in names(published)) ||
+        throw(ToolError("OBS_VALUE is missing on one side", "Both frames need an OBS_VALUE column."))
+    keyof(row) = join((string(row[c]) for c in key_cols), "|")
+    ours_map = Dict{String, Any}(keyof(r) => as_float(r["OBS_VALUE"]) for r in eachrow(ours))
+    pub_map = Dict{String, Any}(keyof(r) => as_float(r["OBS_VALUE"]) for r in eachrow(published))
+    matched = String[k for k in keys(ours_map) if haskey(pub_map, k)]
+    only_ours = String[k for k in keys(ours_map) if !haskey(pub_map, k)]
+    only_pub = String[k for k in keys(pub_map) if !haskey(ours_map, k)]
+    exact = 0; close = 0; max_rel = 0.0
+    mismatches = Any[]
+    for k in sort(matched)
+        a = ours_map[k]; b = pub_map[k]
+        if a === nothing || b === nothing
+            push!(mismatches, Dict{String, Any}("key" => k, "ours" => a, "published" => b))
+            continue
+        end
+        if a == b
+            exact += 1
+        else
+            rel = abs(a - b) / max(abs(b), 1e-12)
+            max_rel = max(max_rel, rel)
+            if rel <= 0.01
+                close += 1
+            elseif length(mismatches) < MAX_MISMATCH_SAMPLES
+                push!(mismatches, Dict{String, Any}("key" => k, "ours" => a, "published" => b,
+                                                    "relative_difference" => jsonable(rel)))
+            end
+        end
+    end
+    return Dict{String, Any}(
+        "key_columns" => key_cols,
+        "our_rows" => nrow(ours), "published_rows" => nrow(published),
+        "matched" => length(matched), "only_in_ours" => length(only_ours), "only_in_published" => length(only_pub),
+        "only_in_ours_sample" => collect(Iterators.take(sort(only_ours), MAX_KEY_SAMPLES)),
+        "only_in_published_sample" => collect(Iterators.take(sort(only_pub), MAX_KEY_SAMPLES)),
+        "exact_agreement" => exact, "within_one_percent" => close,
+        "disagreements" => length(matched) - exact - close,
+        "max_relative_difference" => jsonable(max_rel),
+        "disagreement_sample" => mismatches)
+end
+
+"""
+    compare_with_published(session; source_id, schema_id, data_url=nothing, filters=nothing,
+                           start_period=nothing, end_period=nothing)
+
+Fetch what the provider already publishes for this dataflow and compare it
+with the last `run_script` result on the shared dimension and time columns.
+Give `data_url` (for example from the gateway's build_data_url), or
+`filters` such as `{"REF_AREA": "KOR"}` and the URL is built from the schema.
+"""
+function compare_with_published(session::Session; source_id, schema_id, data_url=nothing, filters=nothing,
+                                start_period=nothing, end_period=nothing)
+    src = get_source(session, source_id)
+    entry = get_schema(session, schema_id)
+    src.last_result === nothing && throw(ToolError("No result to compare for " * string(source_id),
+        "Call run_script first; its result is what gets compared."))
+    url = if data_url !== nothing && !isempty(string(data_url))
+        string(data_url)
+    else
+        parts = parse_structure_url(entry.origin)
+        # Data queries want the resolved version; "latest" is only valid for structure queries.
+        version = parts.version
+        info = entry.schema.dataflow_info
+        if version in ("latest", "all", "+") && hasproperty(info, :version) && !ismissing(info.version)
+            version = string(info.version)
+        end
+        dimension_filters = Dict{String, Any}()
+        if filters !== nothing
+            filters isa AbstractDict || throw(ToolError("filters must be an object", "Use {\"REF_AREA\": \"KOR\"}."))
+            for (k, v) in pairs(filters)
+                dimension_filters[string(k)] = string(v)
+            end
+        end
+        construct_data_url(parts.base_url, parts.agency, parts.dataflow_id, version;
+            schema=entry.schema, dimension_filters=dimension_filters,
+            start_period=start_period === nothing ? nothing : string(start_period),
+            end_period=end_period === nothing ? nothing : string(end_period))
+    end
+    published = fetch_sdmx_data(url; timeout=120)
+    nrow(published) == 0 && throw(ToolError("The provider returned no data for " * url,
+        "Loosen the filters or check the key with the gateway's get_data_availability."))
+    out = compare_frames(entry.schema, src.last_result, published)
+    out["data_url"] = url
+    out["source_id"] = String(source_id)
     out["schema_id"] = String(schema_id)
     return out
 end

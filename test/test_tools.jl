@@ -177,16 +177,64 @@ result = DataFrame(
     @test vc["result_rows"] == 10
 end
 
+@testset "compare_with_published" begin
+    session = Tools.Session()
+    sid = Tools.run_tool(session, Tools.load_source, Dict("path" => DEMO_CSV))["source_id"]
+    schid = Tools.register_schema!(session, fixture_schema(), fixture_codelists();
+        origin="https://example.org/rest/dataflow/TEST/DF_INBOUND/1.0?references=all")
+    early = Tools.run_tool(session, Tools.compare_with_published, Dict("source_id" => sid, "schema_id" => schid))
+    @test occursin("run_script", early["hint"])
+
+    ok = Tools.run_tool(session, Tools.run_script, Dict("source_id" => sid, "schema_id" => schid, "script" => GOOD_SCRIPT))
+    @test !haskey(ok, "error")
+    ours = Tools.get_source(session, sid).last_result
+    @test ours isa DataFrame
+
+    parts = Tools.parse_structure_url("https://example.org/rest/dataflow/TEST/DF_INBOUND/1.0?references=all")
+    @test parts.base_url == "https://example.org/rest"
+    @test parts.agency == "TEST" && parts.dataflow_id == "DF_INBOUND" && parts.version == "1.0"
+    @test_throws Tools.ToolError Tools.parse_structure_url("/local/structure.xml")
+
+    published = copy(ours)
+    published[1, "OBS_VALUE"] = published[1, "OBS_VALUE"] * 1.005   # within one percent
+    published[2, "OBS_VALUE"] = published[2, "OBS_VALUE"] * 2.0     # disagreement
+    published = published[1:end-1, :]                               # one row only in ours
+    push!(published, published[1, :]); published[end, "TIME_PERIOD"] = "2099"  # one row only published
+    cmp = Tools.compare_frames(fixture_schema(), ours, published)
+    @test "REF_AREA" in cmp["key_columns"] && "TIME_PERIOD" in cmp["key_columns"]
+    @test cmp["matched"] == 9
+    @test cmp["only_in_ours"] == 1
+    @test cmp["only_in_published"] == 1
+    @test cmp["exact_agreement"] == 7
+    @test cmp["within_one_percent"] == 1
+    @test cmp["disagreements"] == 1
+    @test length(cmp["disagreement_sample"]) == 1
+    @test roundtrip(cmp)["matched"] == 9
+
+    @test_throws Tools.ToolError Tools.compare_frames(fixture_schema(), ours, DataFrame(FOO = [1]))
+end
+
 @testset "MCP wiring" begin
     session = Tools.Session()
     tools = SDMXerWizard.mcp_tools(session)
     @test Set(t.name for t in tools) == Set(["load_schema", "load_source", "infer_mappings",
-                                             "transformation_plan", "run_script", "validate_csv"])
+                                             "transformation_plan", "run_script", "validate_csv",
+                                             "compare_with_published"])
     for t in tools
         @test t.input_schema["type"] == "object"
         @test haskey(t.input_schema, "required")
         @test !isempty(t.description)
+        @test t.annotations["readOnlyHint"] == (t.name != "run_script")
     end
+    @test only(filter(t -> t.name == "run_script", tools)).annotations["destructiveHint"] == true
+    @test only(filter(t -> t.name == "load_schema", tools)).annotations["openWorldHint"] == true
+
+    prompts = SDMXerWizard.mcp_prompts()
+    @test length(prompts) == 1
+    @test prompts[1].name == "map_to_sdmx"
+    @test "file" in [a.name for a in prompts[1].arguments if a.required]
+    @test occursin("{file}", prompts[1].messages[1].content.text)
+    @test occursin("list_dataflows", prompts[1].messages[1].content.text)
     load_tool = only(filter(t -> t.name == "load_source", tools))
     content = load_tool.handler(Dict{String, Any}("path" => DEMO_CSV))
     @test content isa TextContent
@@ -213,7 +261,15 @@ end
     println(proc, JSON3.write(Dict("jsonrpc" => "2.0", "method" => "notifications/initialized"))); flush(proc)
     println(proc, JSON3.write(Dict("jsonrpc" => "2.0", "id" => 2, "method" => "tools/list"))); flush(proc)
     listing = JSON3.read(readline(proc), Dict{String, Any})
-    @test length(listing["result"]["tools"]) == 6
+    @test length(listing["result"]["tools"]) == 7
+    println(proc, JSON3.write(Dict("jsonrpc" => "2.0", "id" => 4, "method" => "prompts/list"))); flush(proc)
+    plist = JSON3.read(readline(proc), Dict{String, Any})
+    @test [p["name"] for p in plist["result"]["prompts"]] == ["map_to_sdmx"]
+    println(proc, JSON3.write(Dict("jsonrpc" => "2.0", "id" => 5, "method" => "prompts/get",
+        "params" => Dict("name" => "map_to_sdmx", "arguments" => Dict("file" => "/tmp/x.csv", "keywords" => "inbound tourism"))))); flush(proc)
+    pget = JSON3.read(readline(proc), Dict{String, Any})
+    @test occursin("/tmp/x.csv", pget["result"]["messages"][1]["content"]["text"])
+    @test !occursin("{endpoint}", pget["result"]["messages"][1]["content"]["text"])
     call = Dict("jsonrpc" => "2.0", "id" => 3, "method" => "tools/call",
         "params" => Dict("name" => "load_source", "arguments" => Dict("path" => DEMO_CSV)))
     println(proc, JSON3.write(call)); flush(proc)
