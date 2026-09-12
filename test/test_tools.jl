@@ -1,4 +1,5 @@
 using Test, JSON3, DataFrames, CSV
+using ModelContextProtocol
 using SDMXer, SDMXerWizard
 using SDMXerWizard.Tools
 @isdefined(fixture_schema) || include("fixtures.jl")
@@ -178,4 +179,50 @@ result = DataFrame(
     vc = Tools.run_tool(session, Tools.validate_csv, Dict("path" => outpath, "schema_id" => schid))
     @test vc["validation"]["compliance_status"] == ok["validation"]["compliance_status"]
     @test vc["result_rows"] == 10
+end
+
+@testset "MCP wiring" begin
+    session = Tools.Session()
+    tools = SDMXerWizard.mcp_tools(session)
+    @test Set(t.name for t in tools) == Set(["load_schema", "lookup_codes", "load_source", "infer_mappings",
+                                             "transformation_plan", "run_script", "validate_csv"])
+    for t in tools
+        @test t.input_schema["type"] == "object"
+        @test haskey(t.input_schema, "required")
+        @test !isempty(t.description)
+    end
+    load_tool = only(filter(t -> t.name == "load_source", tools))
+    content = load_tool.handler(Dict{String, Any}("path" => DEMO_CSV))
+    @test content isa TextContent
+    parsed = JSON3.read(content.text, Dict{String, Any})
+    @test parsed["source_id"] == "source_1"
+
+    # a tool body that prints must not corrupt the returned content
+    noisy = SDMXerWizard.tool_handler(session, (s; x) -> (println("stray output"); Dict{String, Any}("x" => x)))
+    c = noisy(Dict{String, Any}("x" => 1))
+    @test JSON3.read(c.text, Dict{String, Any})["x"] == 1
+end
+
+@testset "MCP stdio round trip" begin
+    project = normpath(joinpath(@__DIR__, ".."))
+    cmd = `$(Base.julia_cmd()) --project=$project --startup-file=no -e "using SDMXerWizard; serve_mcp()"`
+    proc = open(Base.pipeline(cmd; stderr=devnull), "r+")
+    init = Dict("jsonrpc" => "2.0", "id" => 1, "method" => "initialize",
+        "params" => Dict("protocolVersion" => "2025-06-18", "capabilities" => Dict(),
+                         "clientInfo" => Dict("name" => "test", "version" => "0")))
+    println(proc, JSON3.write(init)); flush(proc)
+    reply = JSON3.read(readline(proc), Dict{String, Any})
+    @test reply["id"] == 1
+    @test haskey(reply["result"], "serverInfo")
+    println(proc, JSON3.write(Dict("jsonrpc" => "2.0", "method" => "notifications/initialized"))); flush(proc)
+    println(proc, JSON3.write(Dict("jsonrpc" => "2.0", "id" => 2, "method" => "tools/list"))); flush(proc)
+    listing = JSON3.read(readline(proc), Dict{String, Any})
+    @test length(listing["result"]["tools"]) == 7
+    call = Dict("jsonrpc" => "2.0", "id" => 3, "method" => "tools/call",
+        "params" => Dict("name" => "load_source", "arguments" => Dict("path" => DEMO_CSV)))
+    println(proc, JSON3.write(call)); flush(proc)
+    called = JSON3.read(readline(proc), Dict{String, Any})
+    body = JSON3.read(called["result"]["content"][1]["text"], Dict{String, Any})
+    @test body["source_id"] == "source_1"
+    close(proc)
 end

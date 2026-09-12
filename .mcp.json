@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "sdmxer-wizard": {
+      "command": "julia",
+      "args": [
+        "--project=/home/ubuntu/reps/sdmx/julia_sdmx/SDMXerWizard.jl",
+        "--startup-file=no",
+        "-e",
+        "using SDMXerWizard; serve_mcp()"
+      ]
+    }
+  }
+}

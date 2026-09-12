@@ -40,9 +40,10 @@ include("SDMXAnonymization.jl")
 include("SDMXMappingInference.jl")
 include("SDMXScriptGeneration.jl")
 include("Tools.jl")
+include("MCPServer.jl")
 
 # === TOOL SURFACE ===
-export Tools
+export Tools, serve_mcp, mcp_tools
 
 # === RE-EXPORTED FROM SDMXer ===
 export DataflowSchema, extract_dataflow_schema, extract_all_codelists
