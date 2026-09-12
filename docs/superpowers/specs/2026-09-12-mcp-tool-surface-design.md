@@ -78,8 +78,8 @@ the MCP argument names.
 ### `load_schema`
 
 Arguments: `url` (string; a dataflow URL as given by the .Stat Data Explorer,
-or an agency/id/version identifier that `SDMXer` can resolve), `with_codelists`
-(bool, default true).
+or the path of a local SDMx-ML structure file, both handled by SDMXer's
+`extract_dataflow_schema`), `with_codelists` (bool, default true).
 
 Returns: `schema_id`, `dataflow` (id, agency, version, name), `dimensions`
 (ordered list of id, position, codelist id, whether time), `time_dimension`,
@@ -168,8 +168,8 @@ Reads the CSV and returns the same `validation` and `preview` as `run_script`.
 ### Validation result shape
 
 `compliance_status`, `overall_score`, `total_rows`, `total_columns`, `issues`
-(severity, rule, column, message, sample of offending values where the
-`ValidationIssue` carries them), `recommendations`, `statistics`.
+(rule id, severity, message, location, number of affected rows and up to ten
+affected row indices, suggested fix), `recommendations`, `statistics`.
 
 ## Serialisation
 
@@ -198,7 +198,11 @@ succeeds, so the model reads the error and retries.
 
 Tools never write to stdout. Logging goes through `@info` and `@warn` to
 stderr. `serve_mcp()` sets the global logger to a stderr logger before
-starting.
+starting. Because SDMXer itself prints some errors with `println`, every MCP
+handler runs the tool body inside `redirect_stdout(stderr) do ... end`, so
+stray prints reach stderr and the stdio protocol channel stays clean. The
+tests cover this with a tool body that prints and a check that the handler's
+returned content is still valid JSON.
 
 ## Script sandbox
 
