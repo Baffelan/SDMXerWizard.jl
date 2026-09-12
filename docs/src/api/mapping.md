@@ -1,6 +1,6 @@
 # Mapping Inference
 
-Advanced column mapping inference using fuzzy string matching, value pattern analysis, and optional LLM enhancement.
+Column mapping inference using fuzzy string matching, statistical analysis, and value matching against codelists.
 
 ## Unified API
 
@@ -26,8 +26,6 @@ SDMXerWizard.create_inference_engine
 ## Inference Functions
 
 ```@docs
-SDMXerWizard.infer_column_mappings
-SDMXerWizard.infer_sdmx_column_mappings
 SDMXerWizard.infer_advanced_mappings
 ```
 

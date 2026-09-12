@@ -13,6 +13,7 @@ makedocs(
         "Home" => "index.md",
         "Getting Started" => "getting_started.md",
         "API Reference" => [
+            "Data Sources" => "api/sources.md",
             "Data Profiling" => "api/profiling.md",
             "Mapping Inference" => "api/mapping.md",
             "Script Planning" => "api/scripts.md",

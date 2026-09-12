@@ -81,7 +81,6 @@ end
 Complete generated transformation script with metadata.
 
 # See also
-- [`generate_join_script`](@ref): produces this result for cross-dataflow joins
 """
 struct GeneratedScript
     script_name::String

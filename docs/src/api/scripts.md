@@ -1,31 +1,26 @@
-# Script Generation
+# Script Planning
 
-Functions for generating Tidier.jl and DataFrames.jl transformation scripts from mapping results.
+The transformation script is written by the calling model. These functions
+supply the material it works from and a light check of the finished script.
 
 ## Types
 
 ```@docs
 SDMXerWizard.GeneratedScript
-SDMXerWizard.ScriptGenerator
 SDMXerWizard.ScriptTemplate
 SDMXerWizard.TransformationStep
 ```
 
-## Generator Creation
+## Templates and steps
 
 ```@docs
-SDMXerWizard.create_script_generator
-```
-
-## Script Generation
-
-```@docs
-SDMXerWizard.generate_transformation_script
-SDMXerWizard.generate_transformation_script_text
+SDMXerWizard.default_templates
+SDMXerWizard.select_template
 SDMXerWizard.build_transformation_steps
+SDMXerWizard.get_loading_code
 ```
 
-## Validation & Preview
+## Validation and preview
 
 ```@docs
 SDMXerWizard.validate_generated_script
