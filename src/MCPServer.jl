@@ -12,11 +12,12 @@ const SERVER_INSTRUCTIONS = """
 SDMXerWizard maps a source data file (CSV or Excel) to an SDMx dataflow and validates the result. \
 Discovery is the job of the sdmx-gateway server when it is available: use its list_dataflows to find \
 the dataflow, get_dataflow_structure to inspect it, and get_dimension_codes to browse or search codes. \
-Then, here: load_schema (with the endpoint, agency and dataflow id the gateway reported, or a URL), \
+Then, here: load_schema with the structure_url the gateway reported (or its endpoint, agency and dataflow id), \
 load_source, infer_mappings, transformation_plan, and finally write a Julia script that follows the \
 returned contract and submit it with run_script. Iterate on the script until the validation report is \
-compliant. Handles such as schema_1 and source_1 refer to objects held in this server's session; they \
-do not survive a restart."""
+compliant, then compare_with_published where the provider already has data for the same area. The \
+map_to_sdmx prompt walks through all of this. Handles such as schema_1 and source_1 refer to objects \
+held in this server's session; they do not survive a restart."""
 
 function prop(type::String, description::String; extra...)
     d = Dict{String, Any}("type" => type, "description" => description)
@@ -40,8 +41,8 @@ end
 
 const TOOL_SPECS = [
     (name = "load_schema", fn = Tools.load_schema, annotations = hints(read_only = true, network = true),
-     description = "Fetch an SDMx dataflow structure and store it in the session. Give either url, or endpoint plus dataflow_id (and agency for providers such as OECD that publish under sub-agencies) as reported by the sdmx-gateway tools. Returns schema_id, dimensions in order, attributes, measures, required columns and codelist sizes.",
-     schema = object_schema(["url" => prop("string", "Dataflow structure URL (for example a .Stat Data Explorer developer API link with references=all) or path to a structure XML file"),
+     description = "Fetch an SDMx dataflow structure and store it in the session. Pass the structure_url reported by the sdmx-gateway tools as url; or give endpoint plus dataflow_id (and agency for providers such as OECD that publish under sub-agencies). Returns schema_id, dimensions in order, attributes, measures, required columns and codelist sizes.",
+     schema = object_schema(["url" => prop("string", "Dataflow structure URL: the structure_url from the sdmx-gateway, a .Stat Data Explorer developer API link with references=all, or the path of a structure XML file"),
                              "endpoint" => prop("string", "Provider key as used by the sdmx-gateway server"; enum = sort(collect(keys(Tools.PROVIDERS)))),
                              "dataflow_id" => prop("string", "Dataflow id on that provider, for example DF_BP50 or DSD_TOURISM@DF_INBOUND"),
                              "agency" => prop("string", "Agency owning the dataflow; defaults to the provider's own agency"),
@@ -127,7 +128,7 @@ and report after each one.
 
 1. Find the dataflow: call list_dataflows on the sdmx-gateway server with the keywords {keywords}{?endpoint? on endpoint {endpoint}}. \
 If several dataflows fit, list them and ask me which one before going on.
-2. Load it here: call load_schema with the endpoint, agency and dataflow_id the gateway reported.
+2. Load it here: call load_schema with the structure_url the gateway reported (or, if absent, its endpoint, agency and dataflow_id).
 3. Load the file: call load_source with {file}.
 4. Call infer_mappings and read the candidates and the unmapped required columns.
 5. Where a mapping or a code is unsure, call get_dimension_codes on the sdmx-gateway server. Never invent a code.

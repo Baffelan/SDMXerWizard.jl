@@ -25,8 +25,8 @@ narrate each call.
    the model searched 1,500 OECD dataflows and received a few hundred bytes.
 
 1. **"Load that dataflow into the wizard"**
-   Expected call: `load_schema` with `endpoint`, `agency` and `dataflow_id`
-   taken from the gateway result. Point out the summary: dimensions in
+   Expected call: `load_schema` with the `structure_url` from the gateway
+   result (or its endpoint, agency and dataflow id on an older gateway). Point out the summary: dimensions in
    order, required columns, codelist sizes, and that no codes were returned.
 
 2. **"Load demo/korea/inbound_visitors.csv"**

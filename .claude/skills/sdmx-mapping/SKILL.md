@@ -12,7 +12,7 @@ Two MCP servers share the work. Use each for what it is for.
 | Find a dataflow by keyword | `sdmx-gateway` `list_dataflows` |
 | Inspect a structure, browse or search codes | `sdmx-gateway` `get_dataflow_structure`, `get_dimension_codes` |
 | Check what data exists, build a data URL | `sdmx-gateway` `get_data_availability`, `build_data_url` |
-| Load the structure with codelists | `sdmxer-wizard` `load_schema` (endpoint, agency, dataflow_id from the gateway) |
+| Load the structure with codelists | `sdmxer-wizard` `load_schema` (the gateway's `structure_url`, or endpoint, agency and dataflow_id) |
 | Profile the file, infer mappings, plan | `sdmxer-wizard` `load_source`, `infer_mappings`, `transformation_plan` |
 | Run and validate the script | `sdmxer-wizard` `run_script`, `validate_csv` |
 | Compare with published data | `sdmxer-wizard` `compare_with_published` |

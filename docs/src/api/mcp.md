@@ -30,10 +30,11 @@ runs the model's script and validates the result.
 }
 ```
 
-The handoff is by identifier: `load_schema` accepts the `endpoint` key,
-`agency` and `dataflow_id` exactly as the gateway's `list_dataflows` reports
-them, and builds the structure URL from a provider table that mirrors the
-gateway's. A plain `url` still works for providers the table does not know.
+The handoff is one string: the gateway's `list_dataflows` and
+`get_dataflow_structure` results carry a `structure_url`, and `load_schema`
+takes it as `url`. Gateways older than that field are still served:
+`load_schema` also accepts the `endpoint` key, `agency` and `dataflow_id`
+and builds the URL from a provider table that mirrors the gateway's.
 The gateway can also be self-hosted from its repository with `uv`; see its
 README.
 
