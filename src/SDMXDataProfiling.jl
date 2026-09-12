@@ -93,14 +93,14 @@ end
 # =================== COLUMN ANALYSIS FUNCTIONS ===================
 
 """
-    detect_column_type_and_patterns(column_data::Vector) -> NamedTuple
+    detect_column_type_and_patterns(column_data::AbstractVector) -> NamedTuple
 
 Analyzes a column to detect its type, patterns, and characteristics.
 
 This function examines the data in a column to automatically determine whether it's
 numeric, categorical, temporal, or textual, along with detailed pattern analysis.
 """
-function detect_column_type_and_patterns(column_data::Vector)
+function detect_column_type_and_patterns(column_data::AbstractVector)
     # Remove missing values for analysis
     non_missing_data = filter(!ismissing, column_data)
     
@@ -139,7 +139,7 @@ function detect_column_type_and_patterns(column_data::Vector)
     if all(x -> isa(x, Union{Date, DateTime, Time}), non_missing_data)
         is_temporal = true
         temporal_format = "Julia_DateTime"
-    elseif primary_type == String
+    elseif primary_type <: AbstractString
         # Try to detect date patterns in strings
         date_patterns = [
             r"^\d{4}-\d{2}-\d{2}$" => "YYYY-MM-DD",
@@ -193,7 +193,7 @@ function detect_column_type_and_patterns(column_data::Vector)
     
     # Extract string patterns
     string_patterns = String[]
-    if primary_type == String && length(non_missing_data) > 0
+    if primary_type <: AbstractString && length(non_missing_data) > 0
         # Sample a few values to identify patterns
         sample_strings = string.(non_missing_data[1:min(10, length(non_missing_data))])
         patterns = Set{String}()
@@ -225,14 +225,14 @@ function detect_column_type_and_patterns(column_data::Vector)
 end
 
 """
-    profile_column(name::String, data::Vector) -> ColumnProfile
+    profile_column(name::AbstractString, data::AbstractVector) -> ColumnProfile
 
 Creates a detailed profile for a single column including type detection and statistical analysis.
 
 This function combines column metadata (name, missing values, unique counts) with
 detailed type and pattern analysis to create a comprehensive column profile.
 """
-function profile_column(name::String, data::Vector)
+function profile_column(name::AbstractString, data::AbstractVector)
     missing_count = count(ismissing, data)
     non_missing_data = filter(!ismissing, data)
     unique_count = length(unique(non_missing_data))
@@ -245,7 +245,7 @@ function profile_column(name::String, data::Vector)
     analysis = detect_column_type_and_patterns(data)
     
     return ColumnProfile(
-        name,
+        String(name),
         analysis.type,
         missing_count,
         unique_count,

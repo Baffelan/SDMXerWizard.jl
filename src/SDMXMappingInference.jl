@@ -28,9 +28,9 @@ appropriate underlying implementation based on the specified method.
 - `target_schema`: DataflowSchema defining the SDMX structure
 - `method::Symbol=:heuristic`: Mapping method to use
   - `:heuristic` - Basic name matching and type-based inference (fast, no external dependencies)
-  - `:fuzzy` - Advanced fuzzy matching with statistical analysis
+  - `:fuzzy` - Fuzzy name matching with statistical analysis (no codelist fetch, no LLM)
   - `:llm` - LLM-powered mapping using configured AI provider
-  - `:advanced` - Combination of all methods with confidence scoring
+  - `:advanced` - Fuzzy matching, statistical analysis and codelist value matching with confidence scoring (no LLM)
 
 # Keyword Arguments
 - `llm_provider::Symbol=:ollama`: LLM provider for AI methods (:openai, :anthropic, :ollama)
@@ -97,11 +97,12 @@ function infer_mappings(source_data, target_schema::DataflowSchema;
 
     elseif method == :fuzzy
         verbose && println("Using fuzzy matching method...")
+        # Name-based fuzzy matching plus statistical analysis; codelist value
+        # matching is switched off so no codelists are fetched.
         engine = create_inference_engine(;
-            confidence_threshold=confidence_threshold,
-            use_fuzzy_matching=true,
-            use_value_matching=false,
-            use_llm=false)
+            min_confidence=confidence_threshold,
+            use_statistical_analysis=true,
+            use_value_matching=false)
 
         # Get source DataFrame if needed
         df = isa(source_data, DataFrame) ? source_data : read_source_data(source_profile.file_path)
@@ -133,13 +134,13 @@ function infer_mappings(source_data, target_schema::DataflowSchema;
 
     elseif method == :advanced
         verbose && println("Using advanced mapping with all techniques...")
+        # Fuzzy name matching, statistical analysis and (optionally) codelist
+        # value matching. The inference engine does not call an LLM; use
+        # method=:llm for LLM-based mapping.
         engine = create_inference_engine(;
-            confidence_threshold=confidence_threshold,
-            use_fuzzy_matching=true,
-            use_value_matching=use_codelists,
-            use_llm=(llm_provider != :none),
-            llm_provider=llm_provider,
-            llm_model=llm_model)
+            min_confidence=confidence_threshold,
+            use_statistical_analysis=true,
+            use_value_matching=use_codelists)
 
         # Get source DataFrame if needed
         df = isa(source_data, DataFrame) ? source_data : read_source_data(source_profile.file_path)
@@ -366,6 +367,7 @@ mutable struct InferenceEngine
     min_confidence::Float64
     use_statistical_analysis::Bool
     enable_learning::Bool
+    use_value_matching::Bool
 end
 
 """
@@ -382,6 +384,7 @@ datasets and SDMX schemas.
 - `min_confidence::Float64=0.3`: Minimum confidence threshold for mapping suggestions
 - `use_statistical_analysis::Bool=true`: Enable statistical compatibility analysis
 - `enable_learning::Bool=true`: Enable learning from user feedback
+- `use_value_matching::Bool=true`: Fetch the schema's codelists and match source values against them
 
 # Returns
 - `InferenceEngine`: Configured inference engine ready for mapping analysis
@@ -409,7 +412,8 @@ result = infer_advanced_mappings(engine, source_profile, target_schema, source_d
 function create_inference_engine(;fuzzy_threshold=0.6,
                                 min_confidence=0.3,
                                 use_statistical_analysis=true,
-                                enable_learning=true)
+                                enable_learning=true,
+                                use_value_matching=true)
     return InferenceEngine(
         nothing,  # source_profile
         nothing,  # target_schema
@@ -420,12 +424,13 @@ function create_inference_engine(;fuzzy_threshold=0.6,
         fuzzy_threshold,
         min_confidence,
         use_statistical_analysis,
-        enable_learning
+        enable_learning,
+        use_value_matching
     )
 end
 
 """
-    fuzzy_match_score(str1::String, str2::String) -> Float64
+    fuzzy_match_score(str1::AbstractString, str2::AbstractString) -> Float64
 
 Calculates comprehensive fuzzy matching score between strings using multiple algorithms.
 
@@ -434,8 +439,8 @@ similarity, substring matching, token-based similarity, and semantic similarity
 to produce a comprehensive matching score for data mapping inference.
 
 # Arguments
-- `str1::String`: First string to compare
-- `str2::String`: Second string to compare
+- `str1::AbstractString`: First string to compare
+- `str2::AbstractString`: Second string to compare
 
 # Returns
 - `Float64`: Similarity score between 0.0 (no match) and 1.0 (perfect match)
@@ -458,10 +463,10 @@ score = fuzzy_match_score("time_period", "period")  # ~0.7
 # See also
 [`analyze_value_patterns`](@ref), [`create_inference_engine`](@ref)
 """
-function fuzzy_match_score(str1::String, str2::String)
-    # Normalize strings
-    s1 = lowercase(strip(str1))
-    s2 = lowercase(strip(str2))
+function fuzzy_match_score(str1::AbstractString, str2::AbstractString)
+    # Normalize strings (convert to String so InlineStrings and SubStrings behave alike)
+    s1 = lowercase(strip(String(str1)))
+    s2 = lowercase(strip(String(str2)))
 
     if s1 == s2
         return 1.0
@@ -570,11 +575,11 @@ function fuzzy_match_score(str1::String, str2::String)
 end
 
 """
-    analyze_value_patterns(source_values::Vector, target_codelist::DataFrame) -> Dict{String, Any}
+    analyze_value_patterns(source_values::AbstractVector, target_codelist::DataFrame) -> Dict{String, Any}
 
 Analyzes patterns in source values against target codelist to find matches and transformations.
 """
-function analyze_value_patterns(source_values::Vector, target_codelist::DataFrame)
+function analyze_value_patterns(source_values::AbstractVector, target_codelist::DataFrame)
     analysis = Dict{String, Any}(
         "exact_matches" => 0,
         "fuzzy_matches" => 0,
@@ -759,8 +764,10 @@ function infer_advanced_mappings(engine::InferenceEngine,
     engine.source_profile = source_profile
     engine.target_schema = target_schema
 
-    # Load codelist data if needed
-    load_codelist_data!(engine, target_schema)
+    # Load codelist data if value matching is enabled
+    if engine.use_value_matching
+        load_codelist_data!(engine, target_schema)
+    end
 
     mapping_candidates = Vector{MappingCandidate}()
 
@@ -881,16 +888,17 @@ end
 
 """
     analyze_column_mapping(engine::InferenceEngine, source_col::ColumnProfile,
-                          target_col::String, source_data::Vector,
+                          target_col::AbstractString, source_data::AbstractVector,
                           target_schema::DataflowSchema) -> Union{MappingCandidate, Nothing}
 
 Analyzes a specific source-target column mapping.
 """
 function analyze_column_mapping(engine::InferenceEngine,
                                source_col::ColumnProfile,
-                               target_col::String,
-                               source_data::Vector,
+                               target_col::AbstractString,
+                               source_data::AbstractVector,
                                target_schema::DataflowSchema)
+    target_col = String(target_col)
 
     evidence = Dict{String, Any}()
     confidence_score = 0.0
@@ -988,11 +996,11 @@ function analyze_column_mapping(engine::InferenceEngine,
 end
 
 """
-    get_target_column_info(target_col::String, target_schema::DataflowSchema) -> Union{NamedTuple, Nothing}
+    get_target_column_info(target_col::AbstractString, target_schema::DataflowSchema) -> Union{NamedTuple, Nothing}
 
 Gets information about a target column from the schema.
 """
-function get_target_column_info(target_col::String, target_schema::DataflowSchema)
+function get_target_column_info(target_col::AbstractString, target_schema::DataflowSchema)
     # Check dimensions
     if nrow(target_schema.dimensions) > 0
         dim_matches = filter(row -> row.dimension_id == target_col, target_schema.dimensions)
@@ -1115,11 +1123,11 @@ function assess_statistical_compatibility(source_col::ColumnProfile, target_info
 end
 
 """
-    apply_learning_boost(engine::InferenceEngine, source_name::String, target_name::String) -> Float64
+    apply_learning_boost(engine::InferenceEngine, source_name::AbstractString, target_name::AbstractString) -> Float64
 
 Applies learning-based confidence boost based on historical patterns.
 """
-function apply_learning_boost(engine::InferenceEngine, source_name::String, target_name::String)
+function apply_learning_boost(engine::InferenceEngine, source_name::AbstractString, target_name::AbstractString)
     boost = 0.0
 
     # Create pattern key
@@ -1327,13 +1335,13 @@ end
 
 """
     suggest_value_transformations(mapping::MappingCandidate,
-                                 source_data::Vector,
+                                 source_data::AbstractVector,
                                  target_schema::DataflowSchema) -> Vector{String}
 
 Suggests specific value transformation code for a mapping.
 """
 function suggest_value_transformations(mapping::MappingCandidate,
-                                     source_data::Vector,
+                                     source_data::AbstractVector,
                                      target_schema::DataflowSchema)
 
     transformations = String[]
@@ -1365,11 +1373,16 @@ function suggest_value_transformations(mapping::MappingCandidate,
 end
 
 """
-    validate_mapping_quality(result::AdvancedMappingResult) -> Dict{String, Any}
+    validate_mapping_quality(result::AdvancedMappingResult[, target_schema::DataflowSchema]) -> Dict{String, Any}
 
 Validates the quality of the mapping result and provides quality metrics.
+
+When `target_schema` is given, the unmapped target columns are checked against
+the schema's required columns and a warning is added for any required column
+that remains unmapped. Without a schema that check is skipped.
 """
-function validate_mapping_quality(result::AdvancedMappingResult)
+function validate_mapping_quality(result::AdvancedMappingResult,
+                                  target_schema::Union{DataflowSchema, Nothing}=nothing)
     validation = Dict{String, Any}(
         "overall_quality" => result.quality_score,
         "coverage_adequate" => result.coverage_analysis["required_coverage"] >= 0.8,
@@ -1398,11 +1411,14 @@ function validate_mapping_quality(result::AdvancedMappingResult)
         push!(validation["warnings"], "High transformation complexity detected")
     end
 
-    if !isempty(result.unmapped_target_columns)
-        required_cols = get_required_columns(result.mappings[1].source_column)  # This is a simplification
-        unmapped_required = length(intersect(result.unmapped_target_columns, required_cols))
-        if unmapped_required > 0
-            push!(validation["warnings"], "$unmapped_required required columns remain unmapped")
+    if target_schema !== nothing && !isempty(result.unmapped_target_columns)
+        required_cols = get_required_columns(target_schema)
+        unmapped_required = intersect(result.unmapped_target_columns, required_cols)
+        validation["unmapped_required_columns"] = unmapped_required
+        if !isempty(unmapped_required)
+            push!(validation["warnings"],
+                  string(length(unmapped_required)) * " required columns remain unmapped: " *
+                  join(unmapped_required, ", "))
         end
     end
 

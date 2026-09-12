@@ -50,7 +50,7 @@ Represents a CSV file data source with configurable parsing options.
 - `delimiter::Char`: Column delimiter (default: ',')
 - `encoding::String`: File encoding (default: "UTF-8")
 - `header_row::Int`: Which row contains headers (default: 1)
-- `skip_rows::Int`: Number of rows to skip (default: 0)
+- `skip_rows::Int`: Number of rows to skip between the header and the first data row (default: 0)
 """
 struct CSVSource <: FileSource
     path::String
@@ -176,10 +176,12 @@ function read_data end
 # CSV reading implementation
 function read_data(source::CSVSource)
     try
-        return CSV.read(source.path, DataFrame; 
+        # Data starts on the row after the header; skip_rows extra rows are
+        # skipped between the header and the first data row.
+        return CSV.read(source.path, DataFrame;
                        delim=source.delimiter,
                        header=source.header_row,
-                       skipto=source.header_row + source.skip_rows)
+                       skipto=source.header_row + 1 + source.skip_rows)
     catch e
         throw(ArgumentError("Failed to read CSV file $(source.path): $e"))
     end

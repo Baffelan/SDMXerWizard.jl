@@ -77,6 +77,13 @@ include("SDMXJoinPrompts.jl")
 include("SDMXCrossDataflowLLM.jl")
 include("SDMXJoinWorkflow.jl")
 
+# === RE-EXPORTED FROM SDMXer ===
+# The SDMXer entry points an SDMXerWizard workflow starts from, so that
+# `using SDMXerWizard` alone is enough for the README examples. The rest of the
+# SDMXer API (validation, joins, data fetching) still needs `using SDMXer`.
+export DataflowSchema, extract_dataflow_schema, extract_all_codelists
+export get_required_columns, get_optional_columns
+
 # === CORE DATA STRUCTURES ===
 
 # Data Source Types - Abstractions for various data input sources
